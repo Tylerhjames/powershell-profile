@@ -27,6 +27,40 @@ if ($updateResult -notmatch "Already up to date") {
     Write-Host "🔄 Profile updated from Git" -ForegroundColor Cyan
 }
 
+# --- Safe auto-pull if repo is clean and remote reachable ---
+$repoPath = "$HOME\Documents\Git\powershell-profile"
+
+if (Test-Path $repoPath) {
+    try {
+        Set-Location $repoPath
+
+        # Check for uncommitted changes
+        $status = git status --porcelain
+        $hasLocalChanges = -not [string]::IsNullOrWhiteSpace($status)
+
+        # Test remote availability (fast & silent)
+        $remoteReachable = git ls-remote origin -q 2>$null
+
+        if (-not $hasLocalChanges -and $remoteReachable) {
+            git pull --ff-only | Out-Null
+            Write-Host "⬇ Profile updated from GitHub" -ForegroundColor DarkCyan
+        }
+        elseif ($hasLocalChanges) {
+            Write-Host "⚠ Local changes detected — skipping auto-update to prevent overwrite" -ForegroundColor Yellow
+        }
+        else {
+            Write-Host "ℹ GitHub not reachable — skipping update" -ForegroundColor DarkGray
+        }
+    }
+    catch {
+        Write-Host "ℹ Auto-update skipped due to git error" -ForegroundColor DarkGray
+    }
+    finally {
+        Set-Location $HOME
+    }
+}
+
+
 # --- Auto-load functions from the Functions folder ---
 $functionsPath = "$HOME\Documents\Git\powershell-profile\Functions"
 if (Test-Path $functionsPath) {
