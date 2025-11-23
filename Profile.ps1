@@ -27,4 +27,14 @@ if ($updateResult -notmatch "Already up to date") {
     Write-Host "🔄 Profile updated from Git" -ForegroundColor Cyan
 }
 
+# --- Auto-load functions from the Functions folder ---
+$functionsPath = "$HOME\Documents\Git\powershell-profile\Functions"
+if (Test-Path $functionsPath) {
+    Get-ChildItem $functionsPath -Filter *.ps1 | ForEach-Object {
+        . $_.FullName
+    }
+}
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 Write-Host "✅ Roaming PowerShell profile loaded from Git" -ForegroundColor Green
