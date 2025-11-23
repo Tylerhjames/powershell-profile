@@ -41,7 +41,7 @@ if (Test-Path $functionsPath) {
     }
 }
 
-# --- Safe automatic module install and load (local use only) ---
+# --- Silent module install + load (only warn on failures) ---
 $modulesToEnsure = @(
     'PSReadLine',
     'Microsoft.PowerShell.SecretManagement',
@@ -50,26 +50,26 @@ $modulesToEnsure = @(
 )
 
 foreach ($module in $modulesToEnsure) {
+
+    # Install if missing (quiet unless failure)
     if (-not (Get-Module -ListAvailable -Name $module)) {
         try {
-            Write-Host "⬇ Installing missing module: $module" -ForegroundColor DarkYellow
-            Install-Module $module -Scope CurrentUser -Force -ErrorAction Stop
+            Install-Module $module -Scope CurrentUser -Force -ErrorAction Stop | Out-Null
         }
         catch {
-            Write-Host "⚠ Failed to install module: $module (offline or repository unavailable)" -ForegroundColor Yellow
+            Write-Host "⚠ Failed to install module: $module" -ForegroundColor Yellow
             continue
         }
     }
 
+    # Load silently unless failure
     try {
-        Import-Module $module -ErrorAction Stop
-        Write-Host "✅ Loaded module: $module" -ForegroundColor Green
+        Import-Module $module -ErrorAction Stop | Out-Null
     }
     catch {
-        Write-Host "⚠ Failed to import module: $module" -ForegroundColor Yellow
+        Write-Host "⚠ Failed to load module: $module" -ForegroundColor Yellow
     }
 }
-
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 Write-Host "✅ Roaming PowerShell profile loaded from Git" -ForegroundColor Green
