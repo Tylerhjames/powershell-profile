@@ -35,6 +35,35 @@ if (Test-Path $functionsPath) {
     }
 }
 
+# --- Safe automatic module install and load (local use only) ---
+$modulesToEnsure = @(
+    'PSReadLine',
+    'Microsoft.PowerShell.SecretManagement',
+    'Microsoft.PowerShell.SecretStore',
+    'Terminal-Icons'
+)
+
+foreach ($module in $modulesToEnsure) {
+    if (-not (Get-Module -ListAvailable -Name $module)) {
+        try {
+            Write-Host "⬇ Installing missing module: $module" -ForegroundColor DarkYellow
+            Install-Module $module -Scope CurrentUser -Force -ErrorAction Stop
+        }
+        catch {
+            Write-Host "⚠ Failed to install module: $module (offline or repository unavailable)" -ForegroundColor Yellow
+            continue
+        }
+    }
+
+    try {
+        Import-Module $module -ErrorAction Stop
+        Write-Host "✅ Loaded module: $module" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "⚠ Failed to import module: $module" -ForegroundColor Yellow
+    }
+}
+
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 Write-Host "✅ Roaming PowerShell profile loaded from Git" -ForegroundColor Green
