@@ -9,13 +9,12 @@ if (Test-Path $repoPath) {
         $status = git status --porcelain
         $hasLocalChanges = -not [string]::IsNullOrWhiteSpace($status)
 
-                # Test remote availability (fast & reliable)
+        # Test remote availability (fast & reliable)
         $remoteReachable = $false
         try {
             $result = git ls-remote origin 2>$null
             if ($result) { $remoteReachable = $true }
-        }
-        catch { }
+        } catch {}
 
         if (-not $hasLocalChanges -and $remoteReachable) {
             git pull --ff-only | Out-Null
@@ -27,16 +26,6 @@ if (Test-Path $repoPath) {
         else {
             Write-Host "ℹ GitHub not reachable — skipping update" -ForegroundColor DarkGray
         }
-
-        elseif ($hasLocalChanges) {
-            Write-Host "⚠ Local changes detected — skipping auto-update to prevent overwrite" -ForegroundColor Yellow
-        }
-        else {
-            Write-Host "ℹ GitHub not reachable — skipping update" -ForegroundColor DarkGray
-        }
-    }
-    catch {
-        Write-Host "ℹ Auto-update skipped due to git error" -ForegroundColor DarkGray
     }
     finally {
         Set-Location $HOME
