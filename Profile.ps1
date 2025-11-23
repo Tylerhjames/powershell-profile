@@ -1,32 +1,3 @@
-# --- Auto-update with backup, conflict prevention, logging, and update indicator ---
-
-$profileRepo   = "$HOME\Documents\Git\powershell-profile"
-$profileFile   = Join-Path $profileRepo "Profile.ps1"
-$logFile       = Join-Path $profileRepo "update.log"
-$dateStamp     = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-
-# Prevent editing if this is not the repo copy
-if ($PROFILE -ne $profileFile) {
-    Write-Host "⚠ Profile loader active — edit the Git-based Profile.ps1 instead." -ForegroundColor Yellow
-}
-
-# Backup before updating (one backup per day)
-$backupFile = "$profileFile.bak.$(Get-Date -Format yyyy-MM-dd)"
-if (-not (Test-Path $backupFile)) {
-    Copy-Item $profileFile $backupFile -ErrorAction SilentlyContinue
-}
-
-# Pull latest updates quietly
-$updateResult = git -C $profileRepo pull 2>&1
-
-# Log update activity
-"$dateStamp : $updateResult" | Out-File -FilePath $logFile -Append -Encoding utf8
-
-# Subtle update indicator
-if ($updateResult -notmatch "Already up to date") {
-    Write-Host "🔄 Profile updated from Git" -ForegroundColor Cyan
-}
-
 # --- Safe auto-pull if repo is clean and remote reachable ---
 $repoPath = "$HOME\Documents\Git\powershell-profile"
 
@@ -38,13 +9,25 @@ if (Test-Path $repoPath) {
         $status = git status --porcelain
         $hasLocalChanges = -not [string]::IsNullOrWhiteSpace($status)
 
-        # Test remote availability (fast & silent)
-        $remoteReachable = git ls-remote origin -q 2>$null
+                # Test remote availability (fast & reliable)
+        $remoteReachable = $false
+        try {
+            $result = git ls-remote origin 2>$null
+            if ($result) { $remoteReachable = $true }
+        }
+        catch { }
 
         if (-not $hasLocalChanges -and $remoteReachable) {
             git pull --ff-only | Out-Null
             Write-Host "⬇ Profile updated from GitHub" -ForegroundColor DarkCyan
         }
+        elseif ($hasLocalChanges) {
+            Write-Host "⚠ Local changes detected — skipping auto-update to prevent overwrite" -ForegroundColor Yellow
+        }
+        else {
+            Write-Host "ℹ GitHub not reachable — skipping update" -ForegroundColor DarkGray
+        }
+
         elseif ($hasLocalChanges) {
             Write-Host "⚠ Local changes detected — skipping auto-update to prevent overwrite" -ForegroundColor Yellow
         }
