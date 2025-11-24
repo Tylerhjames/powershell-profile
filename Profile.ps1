@@ -41,46 +41,42 @@ if (Test-Path $functionsPath) {
     }
 }
 
+# --- Ensure newest PSReadLine loads instead of bundled version ---
+$latest = Get-Module PSReadLine -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1
+if ($latest) {
+    Remove-Module PSReadLine -ErrorAction SilentlyContinue
+    Import-Module $latest.Path -Force
+}
+
+
 # --- PSReadLine Experience Customization ---
-
-# Ensure PSReadLine is loaded
-Import-Module PSReadLine -ErrorAction SilentlyContinue
-
-$psrl = Get-Module PSReadLine
-$version = [version]$psrl.Version
-
-# Set editing mode (always supported)
+# Set editing style (Emacs = powerful shortcuts, non-modal)
 Set-PSReadLineOption -EditMode Emacs
 
-# Prediction source (supported in all recent versions)
+# Enable predictions and list-style suggestions
 Set-PSReadLineOption -PredictionSource HistoryAndPlugin
+Set-PSReadLineOption -PredictionViewStyle InlineView
 
-# View style selection based on version
-if ($version.Major -ge 2 -and $version.Minor -ge 2) {
-    Set-PSReadLineOption -PredictionViewStyle ListView
+# Smarter history filtering (UpArrow only cycles matching entries)
+Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
+Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
+
+# TAB cycles completion results (Cisco-style)
+Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
+
+# Ctrl+R fuzzy reverse-search through history
+Set-PSReadLineKeyHandler -Chord "Ctrl+r" -Function ReverseSearchHistory
+
+# --- Improved Readable Syntax Colors (2.3.5-safe) ---
+Set-PSReadLineOption -Colors @{
+    Command   = 'Cyan'
+    Parameter = 'Yellow'
+    Operator  = 'Magenta'
+    Variable  = 'Green'
+    String    = 'DarkCyan'
+    Number    = 'Gray'
 }
-else {
-    Set-PSReadLineOption -PredictionViewStyle InlineView
-}
 
-# Key handlers (only apply if supported)
-try { Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete } catch {}
-try { Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward } catch {}
-try { Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward } catch {}
-try { Set-PSReadLineKeyHandler -Chord "Ctrl+R" -Function ReverseSearchHistory } catch {}
-try { Set-PSReadLineKeyHandler -Chord "Ctrl+Space" -Function AcceptNextSuggestionWord } catch {}
-
-# Color customization (skip unsupported properties)
-$colorOptions = @{}
-$colorOptions.Command         = '#00E5FF'
-$colorOptions.Parameter       = '#FFCB6B'
-$colorOptions.Operator        = '#C792EA'
-$colorOptions.Variable        = '#F78C6C'
-$colorOptions.String          = '#C3E88D'
-
-try { $colorOptions.CommandPrediction = '#5EF1FF' } catch {}
-
-Set-PSReadLineOption -Colors $colorOptions
 
 # --- Silent module install + load (only warn on failures) ---
 $modulesToEnsure = @(
