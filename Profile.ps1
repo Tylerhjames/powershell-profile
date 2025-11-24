@@ -67,16 +67,17 @@ Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
 # Ctrl+R fuzzy reverse-search through history
 Set-PSReadLineKeyHandler -Chord "Ctrl+r" -Function ReverseSearchHistory
 
-# --- Improved Readable Syntax Colors (2.3.5-safe) ---
+# ── Matte pastel syntax colors – final version ──
 Set-PSReadLineOption -Colors @{
-    Command   = 'Cyan'
-    Parameter = 'Yellow'
-    Operator  = 'Magenta'
-    Variable  = 'Green'
-    String    = 'DarkCyan'
-    Number    = 'Gray'
+    Command           = '#A7C7E7'   # soft sky blue
+    Parameter         = '#D8BFD8'   # barely-there lavender
+    Operator          = '#B0C4DE'   # light steel blue
+    Variable          = '#98C1D9'   # calm aqua-teal
+    String            = '#B5EAD7'   # soft mint
+    Number            = '#E0BFB8'   # warm sand
+    InlinePrediction  = '#B9ADA2'   # your warm beige-gray
+    Selection         = '#5C6B7A'   # slate selection highlight
 }
-
 
 # --- Silent module install + load (only warn on failures) ---
 $modulesToEnsure = @(
