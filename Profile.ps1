@@ -1,113 +1,72 @@
 # --- Safe auto-pull if repo is clean and remote reachable ---
 $repoPath = "$HOME\Documents\Git\powershell-profile"
-
 if (Test-Path $repoPath) {
     try {
         Set-Location $repoPath
-
-        # Check for uncommitted changes
         $status = git status --porcelain
         $hasLocalChanges = -not [string]::IsNullOrWhiteSpace($status)
-
-        # Test remote availability (fast & reliable)
         $remoteReachable = $false
-        try {
-            $result = git ls-remote origin 2>$null
-            if ($result) { $remoteReachable = $true }
-        } catch {}
+        try { $null = git ls-remote origin 2>$null; $remoteReachable = $true } catch {}
 
         if (-not $hasLocalChanges -and $remoteReachable) {
             git pull --ff-only | Out-Null
-            Write-Host "⬇ Profile updated from GitHub" -ForegroundColor DarkCyan
+            Write-Host "Profile updated from GitHub" -ForegroundColor DarkCyan
         }
         elseif ($hasLocalChanges) {
-            Write-Host "⚠ Local changes detected — skipping auto-update to prevent overwrite" -ForegroundColor Yellow
+            Write-Host "Local changes detected — skipping auto-update" -ForegroundColor Yellow
         }
         else {
-            Write-Host "ℹ GitHub not reachable — skipping update" -ForegroundColor DarkGray
+            Write-Host "GitHub not reachable — skipping update" -ForegroundColor DarkGray
         }
     }
-    finally {
-        Set-Location $HOME
-    }
+    finally { Set-Location $HOME }
 }
 
-
-# --- Auto-load functions from the Functions folder ---
+# --- Auto-load functions ---
 $functionsPath = "$HOME\Documents\Git\powershell-profile\Functions"
 if (Test-Path $functionsPath) {
-    Get-ChildItem $functionsPath -Filter *.ps1 | ForEach-Object {
-        . $_.FullName
-    }
+    Get-ChildItem $functionsPath -Filter *.ps1 | ForEach-Object { . $_.FullName }
 }
 
-# --- Ensure newest PSReadLine loads instead of bundled version ---
+# --- Latest PSReadLine ---
 $latest = Get-Module PSReadLine -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1
-if ($latest) {
-    Remove-Module PSReadLine -ErrorAction SilentlyContinue
-    Import-Module $latest.Path -Force
-}
+if ($latest) { Remove-Module PSReadLine -ErrorAction SilentlyContinue; Import-Module $latest.Path -Force }
 
-
-# --- PSReadLine Experience Customization ---
-# Set editing style (Emacs = powerful shortcuts, non-modal)
+# --- PSReadLine basics ---
 Set-PSReadLineOption -EditMode Emacs
-
-# Enable predictions and list-style suggestions
 Set-PSReadLineOption -PredictionSource HistoryAndPlugin
 Set-PSReadLineOption -PredictionViewStyle InlineView
-
-# Smarter history filtering (UpArrow only cycles matching entries)
-Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
+Set-PSReadLineKeyHandler -Key UpArrow   -Function HistorySearchBackward
 Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
-
-# TAB cycles completion results (Cisco-style)
-Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
-
-# Ctrl+R fuzzy reverse-search through history
+Set-PSReadLineKeyHandler -Key Tab       -Function MenuComplete
 Set-PSReadLineKeyHandler -Chord "Ctrl+r" -Function ReverseSearchHistory
 
-# ── Matte pastel syntax colors – final version ──
+# --- Your exact matte-pastel colors (nothing extra) ---
 Set-PSReadLineOption -Colors @{
-    Command           = '#A7C7E7'   # soft sky blue
-    Parameter         = '#D8BFD8'   # barely-there lavender
-    Operator          = '#B0C4DE'   # light steel blue
-    Variable          = '#98C1D9'   # calm aqua-teal
-    String            = '#B5EAD7'   # soft mint
-    Number            = '#E0BFB8'   # warm sand
-    InlinePrediction  = '#B9ADA2'   # your warm beige-gray
-    Selection         = '#5C6B7A'   # slate selection highlight
+    Command           = '#D4B847'
+    Parameter         = '#C7A8C7'
+    Operator          = '#B0C4DE'
+    Variable          = '#98C1D9'
+    String            = '#B5EAD7'
+    Number            = '#E0BFB8'
+    InlinePrediction  = '#B9ADA2'
+    Selection         = '#5C6B7A'
 }
 
-# --- Silent module install + load (only warn on failures) ---
-$modulesToEnsure = @(
-    'PSReadLine',
-    'Microsoft.PowerShell.SecretManagement',
-    'Microsoft.PowerShell.SecretStore',
-    'Terminal-Icons'
-)
+# --- Muted sage green for property names (Get-* output) ---
+$PSStyle.Formatting.FormatAccent = "`e[38;2;134;166;137m"   # true ANSI sage
+$PSStyle.Formatting.TableHeader = "`e[38;2;134;166;137m"
 
-foreach ($module in $modulesToEnsure) {
-
-    # Install if missing (quiet unless failure)
-    if (-not (Get-Module -ListAvailable -Name $module)) {
-        try {
-            Install-Module $module -Scope CurrentUser -Force -ErrorAction Stop | Out-Null
-        }
-        catch {
-            Write-Host "⚠ Failed to install module: $module" -ForegroundColor Yellow
-            continue
-        }
+# --- Modules ---
+$modules = 'PSReadLine','Microsoft.PowerShell.SecretManagement','Microsoft.PowerShell.SecretStore','Terminal-Icons'
+foreach ($m in $modules) {
+    if (-not (Get-Module -ListAvailable $m)) {
+        try { Install-Module $m -Scope CurrentUser -Force -ErrorAction Stop | Out-Null }
+        catch { Write-Host "Failed installing $m" -ForegroundColor Yellow }
     }
-
-    # Load silently unless failure
-    try {
-        Import-Module $module -ErrorAction Stop | Out-Null
-    }
-    catch {
-        Write-Host "⚠ Failed to load module: $module" -ForegroundColor Yellow
-    }
+    try { Import-Module $m -ErrorAction Stop | Out-Null }
+    catch { Write-Host "Failed loading $m" -ForegroundColor Yellow }
 }
 
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-Write-Host "✅ Roaming PowerShell profile loaded from Git" -ForegroundColor Green
+# --- Calm startup message ---
+Write-Host "Roaming PowerShell profile loaded from Git" -ForegroundColor DarkGreen
