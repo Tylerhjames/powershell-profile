@@ -106,4 +106,7 @@ Register-ObjectEvent $watcher Changed -Action {
     }
 }
 
+if (-not (Get-Alias rpl -ErrorAction SilentlyContinue)) {
+    Set-Alias rpl Reload-Profile -Force
+}
 
