@@ -80,3 +80,4 @@ $watcher.EnableRaisingEvents = $true
 Register-ObjectEvent $watcher Changed -Action {
     Write-Host "`n🔁 Profile change detected — reloading..." -ForegroundColor Yellow
     . $PROFILE
+}
