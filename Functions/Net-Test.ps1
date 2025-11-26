@@ -187,3 +187,5 @@ function Net-Test {
 
 # Safe alias (only this runs when the file is dot-sourced)
 Set-Alias -Name ntest -Value Net-Test -Scope Global
+
+# test reload behavior 

@@ -81,52 +81,9 @@ foreach ($m in $modules) {
 
 Write-Host "✅ Roaming PowerShell profile loaded from Git" -ForegroundColor DarkGreen
 
-# --- Smart Reload Watcher (Debounced & Safe) ---
-$script:ReloadScheduled = $false
-$script:ReloadRunning   = $false
-
-$watcher = New-Object System.IO.FileSystemWatcher
-$watcher.Path = "$HOME\Documents\Git\powershell-profile"
-$watcher.Filter = "*.ps1"
-$watcher.IncludeSubdirectories = $true
-$watcher.EnableRaisingEvents = $true
-
-Register-ObjectEvent $watcher Changed -Action {
-    param($sender,$event)
-
-    $changedFile = $event.FullPath
-    $profileFile = Join-Path "$HOME\Documents\Git\powershell-profile" "Profile.ps1"
-
-    # already reloading? just schedule another
-    if ($script:ReloadRunning) {
-        $script:ReloadScheduled = $true
-        return
-    }
-
-    # debounce rapid saves
-    Start-Sleep -Milliseconds 150
-
-    if ($changedFile -ieq $profileFile) {
-        $script:ReloadRunning = $true
-        Write-Host "`n🔁 Profile updated — reloading..." -ForegroundColor Yellow
-        . $PROFILE
-        $script:ReloadRunning = $false
-
-        if ($script:ReloadScheduled) {
-            $script:ReloadScheduled = $false
-            Write-Host "🔁 Additional changes detected — reloading again..." -ForegroundColor Yellow
-            . $PROFILE
-        }
-    }
-    else {
-        Write-Host "`n📁 Function updated: $([IO.Path]::GetFileName($changedFile))" -ForegroundColor DarkGray
-        Write-Host "   (will apply next session)" -ForegroundColor DarkGray
-    }
+function Reload-Profile {
+    . $PROFILE
+    Write-Host "🔁 Profile reloaded" -ForegroundColor Green
 }
 
-if (-not (Get-Alias rpl -ErrorAction SilentlyContinue)) {
-    Set-Alias rpl Reload-Profile -Force
-}
-
-# test reload behavior 
-
+Set-Alias rpl Reload-Profile
