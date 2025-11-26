@@ -70,3 +70,13 @@ foreach ($m in $modules) {
 
 # --- Calm startup message ---
 Write-Host "Roaming PowerShell profile loaded from Git" -ForegroundColor DarkGreen
+
+$watcher = New-Object System.IO.FileSystemWatcher
+$watcher.Path = "$HOME\Documents\Git\powershell-profile"
+$watcher.Filter = "*.ps1"
+$watcher.IncludeSubdirectories = $true
+$watcher.EnableRaisingEvents = $true
+
+Register-ObjectEvent $watcher Changed -Action {
+    Write-Host "`n🔁 Profile change detected — reloading..." -ForegroundColor Yellow
+    . $PROFILE
