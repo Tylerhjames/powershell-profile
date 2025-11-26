@@ -85,4 +85,7 @@ function Reload-Profile {
     Write-Host "🔁 Reloading profile..." -ForegroundColor Yellow
     . $PROFILE
 }
-Set-Alias rp Reload-Profile
+if (-not (Get-Alias rpl -ErrorAction SilentlyContinue)) {
+    Set-Alias rpl Reload-Profile -Force
+}
+
