@@ -81,11 +81,29 @@ foreach ($m in $modules) {
 
 Write-Host "✅ Roaming PowerShell profile loaded from Git" -ForegroundColor DarkGreen
 
-function Reload-Profile {
-    Write-Host "🔁 Reloading profile..." -ForegroundColor Yellow
-    . $PROFILE
+# --- Smart Reload Watcher (Hybrid) ---
+$watcher = New-Object System.IO.FileSystemWatcher
+$watcher.Path = "$HOME\Documents\Git\powershell-profile"
+$watcher.Filter = "*.ps1"
+$watcher.IncludeSubdirectories = $true
+$watcher.EnableRaisingEvents = $true
+
+Register-ObjectEvent $watcher Changed -Action {
+    param($sender, $event)
+
+    $changedFile = $event.FullPath
+
+    # Normalize casing and slashes
+    $profileFile = (Join-Path "$HOME\Documents\Git\powershell-profile" "Profile.ps1")
+
+    if ($changedFile -ieq $profileFile) {
+        Write-Host "`n🔁 Profile updated — reloading..." -ForegroundColor Yellow
+        . $PROFILE
+    }
+    else {
+        Write-Host "`n📁 Function updated: $([System.IO.Path]::GetFileName($changedFile))" -ForegroundColor DarkGray
+        Write-Host "   (will apply on next PowerShell session)" -ForegroundColor DarkGray
+    }
 }
-if (-not (Get-Alias rpl -ErrorAction SilentlyContinue)) {
-    Set-Alias rpl Reload-Profile -Force
-}
+
 
