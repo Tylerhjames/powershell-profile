@@ -1,20 +1,21 @@
-# ── Silent, safe auto-pull — shows yellow warning when you have local changes ──
+# ── Silent, safe auto-pull — yellow warning works again on dirty repo ──
 $repo = "$HOME\Documents\Git\powershell-profile"
 
 if (Test-Path "$repo\.git") {
     try {
         Push-Location $repo -ErrorAction Stop
 
-        # Ensure upstream (once)
+        # Ensure upstream tracking (once, silent)
         git branch --set-upstream-to=origin/main main 2>$null | Out-Null
 
-        # Fast local vs remote check
+        # Fast check if we're behind
         $local  = git rev-parse HEAD 2>$null
         $remote = git rev-parse '@{u}' 2>$null
 
         if ($local -and $remote -and $local -ne $remote) {
-            # Explicitly check for local changes (this line now survives missing git in PATH)
-            $status = git status --porcelain 2>$null
+            # THIS LINE IS THE FIX — do NOT redirect stderr here
+            $status = git status --porcelain
+
             if ([string]::IsNullOrWhiteSpace($status)) {
                 git pull --ff-only --quiet 2>$null
                 Write-Host "Profile silently updated from GitHub" -ForegroundColor DarkGreen
@@ -25,7 +26,7 @@ if (Test-Path "$repo\.git") {
         }
     }
     catch {
-        # Only silence real errors — never hide the dirty-repo case
+        # Only silence real crashes, not normal git warnings
     }
     finally {
         Pop-Location -ErrorAction SilentlyContinue
@@ -100,4 +101,4 @@ function Update-Profile {
 }
 
 #test
-#testtest
+#testtestc
