@@ -1,36 +1,27 @@
-# ── Silent, safe auto-pull — yellow warning works again on dirty repo ──
+# ── Auto-pull: reliable yellow warning when Profile.ps1 is modified ──
 $repo = "$HOME\Documents\Git\powershell-profile"
 
 if (Test-Path "$repo\.git") {
-    try {
-        Push-Location $repo -ErrorAction Stop
+    Set-Location $repo
 
-        # Ensure upstream tracking (once, silent)
-        git branch --set-upstream-to=origin/main main 2>$null | Out-Null
+    # Ensure upstream once
+    git branch --set-upstream-to=origin/main main 2>$null | Out-Null
 
-        # Fast check if we're behind
-        $local  = git rev-parse HEAD 2>$null
-        $remote = git rev-parse '@{u}' 2>$null
+    # Fetch quietly so we know if we're behind
+    git fetch --quiet 2>$null
 
-        if ($local -and $remote -and $local -ne $remote) {
-            # THIS LINE IS THE FIX — do NOT redirect stderr here
-            $status = git status --porcelain
+    # Check for any local changes (this line is 100% parser-safe)
+    $dirty = git status --porcelain | Where-Object { $_ -notmatch '^\?\?' }
 
-            if ([string]::IsNullOrWhiteSpace($status)) {
-                git pull --ff-only --quiet 2>$null
-                Write-Host "Profile silently updated from GitHub" -ForegroundColor DarkGreen
-            }
-            else {
-                Write-Host "Local changes detected — skipping auto-update" -ForegroundColor Yellow
-            }
-        }
+    if ($dirty) {
+        Write-Host "Local changes detected — skipping auto-update" -ForegroundColor Yellow
     }
-    catch {
-        # Only silence real crashes, not normal git warnings
+    elseif ((git rev-parse HEAD) -ne (git rev-parse '@{u}' 2>$null)) {
+        git pull --ff-only --quiet 2>$null
+        Write-Host "Profile updated from GitHub" -ForegroundColor DarkGreen
     }
-    finally {
-        Pop-Location -ErrorAction SilentlyContinue
-    }
+
+    Set-Location $HOME
 }
 # --- Auto-load functions ---
 $functionsPath = "$HOME\Documents\Git\powershell-profile\Functions"
@@ -99,6 +90,3 @@ function Update-Profile {
     }
     Set-Location $HOME
 }
-
-#test
-#testtestc
