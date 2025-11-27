@@ -1,16 +1,19 @@
-# ── Silent, safe auto-pull on every new session ──
+# ── Silent, safe auto-pull — works on fresh clones and existing installs ──
 $repo = "$HOME\Documents\Git\powershell-profile"
 
 if (Test-Path "$repo\.git") {
     try {
         Push-Location $repo -ErrorAction Stop
 
-        # Fast local-only check first
+        # Ensure upstream tracking exists (harmless if already set)
+        git branch --set-upstream-to=origin/main main 2>$null | Out-Null
+
+        # Fast local-vs-remote check (zero traffic when up-to-date)
         $local  = git rev-parse HEAD 2>$null
         $remote = git rev-parse '@{u}' 2>$null
 
         if ($local -and $remote -and $local -ne $remote) {
-            # Only pull if repo is clean
+            # Only pull when repo is clean
             $dirty = git status --porcelain
             if ([string]::IsNullOrWhiteSpace($dirty)) {
                 git pull --ff-only --quiet
@@ -22,7 +25,7 @@ if (Test-Path "$repo\.git") {
         }
     }
     catch {
-        # Completely silent on any error (offline, no upstream, etc.)
+        # Network offline, no upstream, etc. → completely silent
     }
     finally {
         Pop-Location -ErrorAction SilentlyContinue
