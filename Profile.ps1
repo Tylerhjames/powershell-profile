@@ -1,18 +1,10 @@
 # ── Auto-pull: reliable yellow warning when Profile.ps1 is modified ──
 $repo = "$HOME\Documents\Git\powershell-profile"
-
 if (Test-Path "$repo\.git") {
     Set-Location $repo
-
-    # Ensure upstream once
     git branch --set-upstream-to=origin/main main 2>$null | Out-Null
-
-    # Fetch quietly so we know if we're behind
     git fetch --quiet 2>$null
-
-    # Check for any local changes (this line is 100% parser-safe)
     $dirty = git status --porcelain | Where-Object { $_ -notmatch '^\?\?' }
-
     if ($dirty) {
         Write-Host "Local changes detected — skipping auto-update" -ForegroundColor Yellow
     }
@@ -20,9 +12,9 @@ if (Test-Path "$repo\.git") {
         git pull --ff-only --quiet 2>$null
         Write-Host "Profile updated from GitHub" -ForegroundColor DarkGreen
     }
-
     Set-Location $HOME
 }
+
 # --- Auto-load functions ---
 $functionsPath = "$HOME\Documents\Git\powershell-profile\Functions"
 if (Test-Path $functionsPath) {
@@ -40,9 +32,9 @@ if ($latest) {
 Set-PSReadLineOption -EditMode Emacs
 Set-PSReadLineOption -PredictionSource HistoryAndPlugin
 Set-PSReadLineOption -PredictionViewStyle InlineView
-Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
+Set-PSReadLineKeyHandler -Key UpArrow   -Function HistorySearchBackward
 Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
-Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
+Set-PSReadLineKeyHandler -Key Tab       -Function MenuComplete
 Set-PSReadLineKeyHandler -Chord "Ctrl+r" -Function ReverseSearchHistory
 
 # --- Matte pastel theme ---
@@ -59,10 +51,21 @@ Set-PSReadLineOption -Colors @{
 
 # --- Muted sage green formatting ---
 $PSStyle.Formatting.FormatAccent = "`e[38;2;134;166;137m"
-$PSStyle.Formatting.TableHeader = "`e[38;2;134;166;137m"
+$PSStyle.Formatting.TableHeader   = "`e[38;2;134;166;137m"
+
+# ── Enable built-in Microsoft predictor only if the parameter exists (works on 7.2–7.5+) ──
+if (Get-Command Set-PSReadLineOption -ParameterName Predictor -ErrorAction SilentlyContinue) {
+    Set-PSReadLineOption -Predictor @{
+        Guid = 'e2b5c0f9-3a3e-4f0e-9c4d-7e6b3b3e8e8e'
+    }
+}
 
 # --- Modules ---
-$modules = 'PSReadLine','Microsoft.PowerShell.SecretManagement','Microsoft.PowerShell.SecretStore','Terminal-Icons'
+$modules = 'PSReadLine',
+            'Microsoft.PowerShell.SecretManagement',
+            'Microsoft.PowerShell.SecretStore',
+            'Terminal-Icons'
+
 foreach ($m in $modules) {
     if (-not (Get-Module -ListAvailable $m)) {
         try { Install-Module $m -Scope CurrentUser -Force -ErrorAction Stop | Out-Null }
@@ -80,7 +83,6 @@ function Reload-Profile {
 }
 Set-Alias rpl Reload-Profile
 
-# ── Manual update command (optional but handy) ──
 function Update-Profile {
     Set-Location "$HOME\Documents\Git\powershell-profile"
     if ((git status --porcelain) -eq '') {
