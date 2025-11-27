@@ -140,5 +140,3 @@ function Invoke-NetTest {
 
 # Create alias so you can just type 'net-test'
 Set-Alias -Name net-test -Value Invoke-NetTest -Scope Global
-
-Write-Host "net-test function loaded! Type 'net-test' to run." -ForegroundColor Green
