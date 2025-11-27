@@ -1,37 +1,36 @@
-# ── Silent, safe auto-pull — works on fresh clones and existing installs ──
+# ── Silent, safe auto-pull — shows yellow warning when you have local changes ──
 $repo = "$HOME\Documents\Git\powershell-profile"
 
 if (Test-Path "$repo\.git") {
     try {
         Push-Location $repo -ErrorAction Stop
 
-        # Ensure upstream tracking exists (harmless if already set)
+        # Ensure upstream (once)
         git branch --set-upstream-to=origin/main main 2>$null | Out-Null
 
-        # Fast local-vs-remote check (zero traffic when up-to-date)
+        # Fast local vs remote check
         $local  = git rev-parse HEAD 2>$null
         $remote = git rev-parse '@{u}' 2>$null
 
         if ($local -and $remote -and $local -ne $remote) {
-            # Only pull when repo is clean
-            $dirty = git status --porcelain
-            if ([string]::IsNullOrWhiteSpace($dirty)) {
-                git pull --ff-only --quiet
+            # Explicitly check for local changes (this line now survives missing git in PATH)
+            $status = git status --porcelain 2>$null
+            if ([string]::IsNullOrWhiteSpace($status)) {
+                git pull --ff-only --quiet 2>$null
                 Write-Host "Profile silently updated from GitHub" -ForegroundColor DarkGreen
             }
             else {
-                Write-Host "Local changes in profile repo — update skipped" -ForegroundColor Yellow
+                Write-Host "Local changes detected — skipping auto-update" -ForegroundColor Yellow
             }
         }
     }
     catch {
-        # Network offline, no upstream, etc. → completely silent
+        # Only silence real errors — never hide the dirty-repo case
     }
     finally {
         Pop-Location -ErrorAction SilentlyContinue
     }
 }
-
 # --- Auto-load functions ---
 $functionsPath = "$HOME\Documents\Git\powershell-profile\Functions"
 if (Test-Path $functionsPath) {
@@ -99,3 +98,6 @@ function Update-Profile {
     }
     Set-Location $HOME
 }
+
+#test
+#testtest
