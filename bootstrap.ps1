@@ -167,17 +167,18 @@ if (-not (Test-Path $loaderDir)) {
     New-Item -ItemType Directory -Path $loaderDir -Force | Out-Null
 }
 
-$loaderContent = @"
+$loaderContent = @'
 # Synced PowerShell profile loader — managed by bootstrap.ps1
 # Edit the Git-based Profile.ps1 instead.
-\$gitProfile = "$profileRepoPath\\Profile.ps1"
 
-if (-not (Test-Path \$gitProfile)) {
-    Write-Warning "Git-based profile not found: \$gitProfile"
+$gitProfile = "$profileRepoPath\\Profile.ps1"
+
+if (-not (Test-Path $gitProfile)) {
+    Write-Warning "Git-based profile not found: $gitProfile"
 } else {
-    Invoke-Expression (Get-Content \$gitProfile -Raw)
+    Invoke-Expression (Get-Content $gitProfile -Raw)
 }
-"@
+'@ # ← closing marker must be flush left and on its own line
 
 Write-Info "Writing loader profile to $loaderPath"
 $loaderContent | Set-Content -Path $loaderPath -Encoding UTF8
