@@ -1,32 +1,31 @@
-# --- Safe auto-pull if repo is clean and remote reachable ---
-$repoPath = "$HOME\Documents\Git\powershell-profile"
+# ── Silent, safe auto-pull on every new session ──
+$repo = "$HOME\Documents\Git\powershell-profile"
 
-if (Test-Path $repoPath) {
+if (Test-Path "$repo\.git") {
     try {
-        Set-Location $repoPath
-        $status = git status --porcelain 2>$null
-        $hasLocalChanges = -not [string]::IsNullOrWhiteSpace($status)
+        Push-Location $repo -ErrorAction Stop
 
-        # Silent remote check (no PSJob output)
-        $remoteReachable = $false
-        try {
-            git ls-remote origin 2>&1 | Out-Null
-            $remoteReachable = $true
-        } catch {}
+        # Fast local-only check first
+        $local  = git rev-parse HEAD 2>$null
+        $remote = git rev-parse '@{u}' 2>$null
 
-        if (-not $hasLocalChanges -and $remoteReachable) {
-            git pull --ff-only 2>&1 | Out-Null
-            Write-Host "⬇ Profile updated from GitHub" -ForegroundColor DarkCyan
-        }
-        elseif ($hasLocalChanges) {
-            Write-Host "⚠ Local changes detected — skipping auto-update" -ForegroundColor Yellow
-        }
-        else {
-            Write-Host "ℹ GitHub not reachable — skipping update" -ForegroundColor DarkGray
+        if ($local -and $remote -and $local -ne $remote) {
+            # Only pull if repo is clean
+            $dirty = git status --porcelain
+            if ([string]::IsNullOrWhiteSpace($dirty)) {
+                git pull --ff-only --quiet
+                Write-Host "Profile silently updated from GitHub" -ForegroundColor DarkGreen
+            }
+            else {
+                Write-Host "Local changes in profile repo — update skipped" -ForegroundColor Yellow
+            }
         }
     }
+    catch {
+        # Completely silent on any error (offline, no upstream, etc.)
+    }
     finally {
-        Set-Location $HOME
+        Pop-Location -ErrorAction SilentlyContinue
     }
 }
 
@@ -47,9 +46,9 @@ if ($latest) {
 Set-PSReadLineOption -EditMode Emacs
 Set-PSReadLineOption -PredictionSource HistoryAndPlugin
 Set-PSReadLineOption -PredictionViewStyle InlineView
-Set-PSReadLineKeyHandler -Key UpArrow   -Function HistorySearchBackward
+Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
 Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
-Set-PSReadLineKeyHandler -Key Tab       -Function MenuComplete
+Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
 Set-PSReadLineKeyHandler -Chord "Ctrl+r" -Function ReverseSearchHistory
 
 # --- Matte pastel theme ---
@@ -65,25 +64,35 @@ Set-PSReadLineOption -Colors @{
 }
 
 # --- Muted sage green formatting ---
-$PSStyle.Formatting.FormatAccent  = "`e[38;2;134;166;137m"
-$PSStyle.Formatting.TableHeader   = "`e[38;2;134;166;137m"
+$PSStyle.Formatting.FormatAccent = "`e[38;2;134;166;137m"
+$PSStyle.Formatting.TableHeader = "`e[38;2;134;166;137m"
 
 # --- Modules ---
 $modules = 'PSReadLine','Microsoft.PowerShell.SecretManagement','Microsoft.PowerShell.SecretStore','Terminal-Icons'
 foreach ($m in $modules) {
     if (-not (Get-Module -ListAvailable $m)) {
         try { Install-Module $m -Scope CurrentUser -Force -ErrorAction Stop | Out-Null }
-        catch { Write-Host "⚠ Failed installing $m" -ForegroundColor Yellow }
+        catch { Write-Host "Failed installing $m" -ForegroundColor Yellow }
     }
     try { Import-Module $m -ErrorAction Stop | Out-Null }
-    catch { Write-Host "⚠ Failed loading $m" -ForegroundColor Yellow }
+    catch { Write-Host "Failed loading $m" -ForegroundColor Yellow }
 }
 
-Write-Host "✅ Roaming PowerShell profile loaded from Git" -ForegroundColor DarkGreen
+Write-Host "Roaming PowerShell profile loaded from Git" -ForegroundColor DarkGreen
 
 function Reload-Profile {
     . $PROFILE
-    Write-Host "🔁 Profile reloaded" -ForegroundColor Green
+    Write-Host "Profile reloaded" -ForegroundColor Green
 }
-
 Set-Alias rpl Reload-Profile
+
+# ── Manual update command (optional but handy) ──
+function Update-Profile {
+    Set-Location "$HOME\Documents\Git\powershell-profile"
+    if ((git status --porcelain) -eq '') {
+        git pull --ff-only --quiet && Write-Host "Profile force-updated" -ForegroundColor DarkGreen
+    } else {
+        Write-Host "Local changes present — commit or stash first" -ForegroundColor Yellow
+    }
+    Set-Location $HOME
+}
