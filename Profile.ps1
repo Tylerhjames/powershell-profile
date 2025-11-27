@@ -64,7 +64,8 @@ if (Get-Command Set-PSReadLineOption -ParameterName Predictor -ErrorAction Silen
 $modules = 'PSReadLine',
             'Microsoft.PowerShell.SecretManagement',
             'Microsoft.PowerShell.SecretStore',
-            'Terminal-Icons'
+            'Terminal-Icons',
+			'Pester'
 
 foreach ($m in $modules) {
     if (-not (Get-Module -ListAvailable $m)) {
