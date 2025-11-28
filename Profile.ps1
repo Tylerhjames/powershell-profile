@@ -83,6 +83,7 @@ function Reload-Profile {
     Write-Host "Profile reloaded" -ForegroundColor Green
 }
 Set-Alias rpl Reload-Profile
+Set-Alias scan Scan-Network
 
 function Update-Profile {
     Set-Location "$HOME\Documents\Git\powershell-profile"
