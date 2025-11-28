@@ -5,6 +5,7 @@ function tech {
     Write-Host "3) Renew Network"
     Write-Host "4) Flush DNS"
     Write-Host "5) Check Email DNS"
+	Write-Host "6) Scan-Network"
     Write-Host "Q) Quit"
 
     switch (Read-Host "Select") {
@@ -13,5 +14,6 @@ function tech {
         "3" { renew-safe }
         "4" { ipconfig /flushdns }
         "5" { Test-EmailDNS }
+		"6" { Scan-Network }
     }
 }
