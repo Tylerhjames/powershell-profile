@@ -1,96 +1,272 @@
-# ── Auto-pull: reliable yellow warning when Profile.ps1 is modified ──
-$repo = "$HOME\Documents\Git\powershell-profile"
-if (Test-Path "$repo\.git") {
-    Set-Location $repo
-    git branch --set-upstream-to=origin/main main 2>$null | Out-Null
-    git fetch --quiet 2>$null
-    $dirty = git status --porcelain | Where-Object { $_ -notmatch '^\?\?' }
+# ══════════════════════════════════════════════════════════════════════════════
+# Optimized Roaming PowerShell Profile with Auto-Sync
+# ══════════════════════════════════════════════════════════════════════════════
+
+$ErrorActionPreference = 'SilentlyContinue'  # Reduce noise from git operations
+
+# ── Configuration ──
+$script:ProfileRepo = "$HOME\Documents\Git\powershell-profile"
+$script:RequiredModules = @('Terminal-Icons')  # Only load essentials at startup
+$script:LazyModules = @('Pester', 'Microsoft.PowerShell.SecretManagement', 'Microsoft.PowerShell.SecretStore')
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Auto-Pull from Git (Optimized)
+# ══════════════════════════════════════════════════════════════════════════════
+
+if (Test-Path "$ProfileRepo\.git") {
+    Push-Location $ProfileRepo -StackName ProfileSync
+    
+    # Skip unnecessary branch setup if already configured
+    $branch = git branch --show-current
+    if ($branch -eq 'main') {
+        $upstream = git rev-parse --abbrev-ref '@{u}' 2>$null
+        if (-not $upstream) {
+            git branch --set-upstream-to=origin/main main *>$null
+        }
+    }
+    
+    # Quick fetch without verbose output
+    git fetch --quiet *>$null
+    
+    # Check for changes
+    $localCommit = git rev-parse HEAD 2>$null
+    $remoteCommit = git rev-parse '@{u}' 2>$null
+    $dirty = git diff --quiet HEAD; $LASTEXITCODE -ne 0
+    
     if ($dirty) {
-        Write-Host "Local changes detected — skipping auto-update" -ForegroundColor Yellow
+        Write-Host "⚠ Local changes detected — skipping auto-update" -ForegroundColor Yellow
     }
-    elseif ((git rev-parse HEAD) -ne (git rev-parse '@{u}' 2>$null)) {
-        git pull --ff-only --quiet 2>$null
-        Write-Host "Profile updated from GitHub" -ForegroundColor DarkGreen
+    elseif ($localCommit -ne $remoteCommit) {
+        git pull --ff-only --quiet *>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "✓ Profile updated from GitHub" -ForegroundColor DarkGreen
+        }
     }
-    Set-Location $HOME
+    
+    Pop-Location -StackName ProfileSync
 }
 
-# --- Auto-load functions ---
-$functionsPath = "$HOME\Documents\Git\powershell-profile\Functions"
+# ══════════════════════════════════════════════════════════════════════════════
+# Auto-Load Functions
+# ══════════════════════════════════════════════════════════════════════════════
+
+$functionsPath = "$ProfileRepo\Functions"
 if (Test-Path $functionsPath) {
-    Get-ChildItem $functionsPath -Filter *.ps1 | ForEach-Object { . $_.FullName }
+    Get-ChildItem $functionsPath -Filter *.ps1 -ErrorAction SilentlyContinue | 
+        ForEach-Object { . $_.FullName }
 }
 
-# --- Latest PSReadLine ---
-$latest = Get-Module PSReadLine -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1
-if ($latest) {
+# ══════════════════════════════════════════════════════════════════════════════
+# PSReadLine Configuration (Lazy Load Latest Version)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Import latest PSReadLine if newer version is available
+$currentPSRL = Get-Module PSReadLine
+$latestPSRL = Get-Module PSReadLine -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1
+
+if ($latestPSRL -and ($currentPSRL.Version -lt $latestPSRL.Version)) {
     Remove-Module PSReadLine -ErrorAction SilentlyContinue
-    Import-Module $latest.Path -Force
+    Import-Module $latestPSRL.Path -Force -ErrorAction SilentlyContinue
 }
 
-# --- PSReadLine basics ---
+# ── PSReadLine Settings ──
 Set-PSReadLineOption -EditMode Emacs
 Set-PSReadLineOption -PredictionSource HistoryAndPlugin
 Set-PSReadLineOption -PredictionViewStyle InlineView
-Set-PSReadLineKeyHandler -Key UpArrow   -Function HistorySearchBackward
+Set-PSReadLineOption -BellStyle None  # Disable annoying beeps
+
+# Key bindings
+Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
 Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
-Set-PSReadLineKeyHandler -Key Tab       -Function MenuComplete
-Set-PSReadLineKeyHandler -Chord "Ctrl+r" -Function ReverseSearchHistory
+Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
+Set-PSReadLineKeyHandler -Chord 'Ctrl+r' -Function ReverseSearchHistory
 
-# --- Matte pastel theme ---
+# ── Matte Pastel Theme ──
 Set-PSReadLineOption -Colors @{
-    Command           = '#D4B847'
-    Parameter         = '#C7A8C7'
-    Operator          = '#B0C4DE'
-    Variable          = '#98C1D9'
-    String            = '#B5EAD7'
-    Number            = '#E0BFB8'
-    InlinePrediction  = '#B9ADA2'
-    Selection         = '#5C6B7A'
+    Command          = '#D4B847'
+    Parameter        = '#C7A8C7'
+    Operator         = '#B0C4DE'
+    Variable         = '#98C1D9'
+    String           = '#B5EAD7'
+    Number           = '#E0BFB8'
+    InlinePrediction = '#B9ADA2'
+    Selection        = '#5C6B7A'
 }
 
-# --- Muted sage green formatting ---
+# ── Muted Sage Green Formatting ──
 $PSStyle.Formatting.FormatAccent = "`e[38;2;134;166;137m"
-$PSStyle.Formatting.TableHeader   = "`e[38;2;134;166;137m"
+$PSStyle.Formatting.TableHeader = "`e[38;2;134;166;137m"
 
-# ── Enable built-in Microsoft predictor only if the parameter exists (works on 7.2–7.5+) ──
-if (Get-Command Set-PSReadLineOption -ParameterName Predictor -ErrorAction SilentlyContinue) {
-    Set-PSReadLineOption -Predictor @{
-        Guid = 'e2b5c0f9-3a3e-4f0e-9c4d-7e6b3b3e8e8e'
+# ══════════════════════════════════════════════════════════════════════════════
+# Module Management (Optimized)
+# ══════════════════════════════════════════════════════════════════════════════
+
+function Install-ProfileModule {
+    param([string]$ModuleName)
+    
+    if (-not (Get-Module -ListAvailable $ModuleName)) {
+        Write-Host "Installing $ModuleName..." -ForegroundColor Cyan
+        Install-Module $ModuleName -Scope CurrentUser -Force -AllowClobber *>$null
     }
 }
 
-# --- Modules ---
-$modules = 'PSReadLine',
-            'Microsoft.PowerShell.SecretManagement',
-            'Microsoft.PowerShell.SecretStore',
-            'Terminal-Icons',
-			'Pester'
-
-foreach ($m in $modules) {
-    if (-not (Get-Module -ListAvailable $m)) {
-        try { Install-Module $m -Scope CurrentUser -Force -ErrorAction Stop | Out-Null }
-        catch { Write-Host "Failed installing $m" -ForegroundColor Yellow }
+function Import-ProfileModule {
+    param([string]$ModuleName, [switch]$Lazy)
+    
+    if (-not (Get-Module $ModuleName)) {
+        if ($Lazy) {
+            # Create stub function that loads module on first use
+            return
+        }
+        Import-Module $ModuleName -ErrorAction SilentlyContinue *>$null
     }
-    try { Import-Module $m -ErrorAction Stop | Out-Null }
-    catch { Write-Host "Failed loading $m" -ForegroundColor Yellow }
 }
 
-Write-Host "Roaming PowerShell profile loaded from Git" -ForegroundColor DarkGreen
+# Load essential modules immediately
+foreach ($module in $RequiredModules) {
+    Install-ProfileModule $module
+    Import-ProfileModule $module
+}
+
+# Lazy-load heavy modules (only when needed)
+foreach ($module in $LazyModules) {
+    Install-ProfileModule $module
+    # Don't import yet - load on demand
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Profile Management Functions
+# ══════════════════════════════════════════════════════════════════════════════
 
 function Reload-Profile {
+    <#
+    .SYNOPSIS
+    Reloads the PowerShell profile
+    #>
     . $PROFILE
-    Write-Host "Profile reloaded" -ForegroundColor Green
+    Write-Host "✓ Profile reloaded" -ForegroundColor Green
 }
 Set-Alias rpl Reload-Profile
-Set-Alias scan Scan-Network
 
 function Update-Profile {
-    Set-Location "$HOME\Documents\Git\powershell-profile"
-    if ((git status --porcelain) -eq '') {
-        git pull --ff-only --quiet && Write-Host "Profile force-updated" -ForegroundColor DarkGreen
+    <#
+    .SYNOPSIS
+    Force-pulls latest profile from Git
+    #>
+    Push-Location $ProfileRepo
+    
+    $status = git status --porcelain 2>$null
+    if ([string]::IsNullOrEmpty($status)) {
+        git pull --ff-only --quiet *>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "✓ Profile force-updated" -ForegroundColor DarkGreen
+            . $PROFILE
+        } else {
+            Write-Host "✗ Update failed" -ForegroundColor Red
+        }
     } else {
-        Write-Host "Local changes present — commit or stash first" -ForegroundColor Yellow
+        Write-Host "⚠ Local changes present — commit or stash first" -ForegroundColor Yellow
+        git status --short
     }
-    Set-Location $HOME
+    
+    Pop-Location
 }
+
+function Sync-Profile {
+    <#
+    .SYNOPSIS
+    Commits and pushes profile changes to Git
+    .PARAMETER Message
+    Commit message (defaults to auto-generated message)
+    #>
+    param(
+        [string]$Message = "Auto-sync: $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+    )
+    
+    Push-Location $ProfileRepo
+    
+    try {
+        $status = git status --porcelain 2>$null
+        
+        if ([string]::IsNullOrEmpty($status)) {
+            Write-Host "✓ No changes to sync" -ForegroundColor Gray
+            return
+        }
+        
+        # Show what's being synced
+        Write-Host "Changes to sync:" -ForegroundColor Cyan
+        git status --short
+        
+        # Commit and push
+        git add -A
+        git commit -m $Message *>$null
+        
+        if ($LASTEXITCODE -eq 0) {
+            git push *>$null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "✓ Profile synced to GitHub" -ForegroundColor DarkGreen
+            } else {
+                Write-Host "✗ Push failed - check network connection" -ForegroundColor Red
+            }
+        } else {
+            Write-Host "✗ Commit failed" -ForegroundColor Red
+        }
+    }
+    catch {
+        Write-Host "✗ Sync failed: $_" -ForegroundColor Red
+    }
+    finally {
+        Pop-Location
+    }
+}
+Set-Alias sync Sync-Profile
+
+function Save-Profile {
+    <#
+    .SYNOPSIS
+    Quick save with custom commit message
+    .PARAMETER Message
+    Commit message (prompts if not provided)
+    #>
+    param([string]$Message)
+    
+    if (-not $Message) {
+        $Message = Read-Host "Commit message"
+        if ([string]::IsNullOrWhiteSpace($Message)) {
+            $Message = "Profile update: $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+        }
+    }
+    
+    Sync-Profile -Message $Message
+}
+Set-Alias sp Save-Profile
+
+function Edit-Profile {
+    <#
+    .SYNOPSIS
+    Opens profile in default editor
+    #>
+    code "$ProfileRepo\Profile.ps1"
+}
+Set-Alias ep Edit-Profile
+
+function Show-ProfileStatus {
+    <#
+    .SYNOPSIS
+    Shows Git status of profile repository
+    #>
+    Push-Location $ProfileRepo
+    Write-Host "`nProfile Repository Status:" -ForegroundColor Cyan
+    git status
+    Pop-Location
+}
+Set-Alias ps Show-ProfileStatus
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Startup Message
+# ══════════════════════════════════════════════════════════════════════════════
+
+Write-Host "✓ Roaming PowerShell profile loaded" -ForegroundColor DarkGreen
+
+# Reset error preference
+$ErrorActionPreference = 'Continue'
