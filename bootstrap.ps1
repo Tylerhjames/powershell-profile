@@ -167,16 +167,23 @@ if (-not (Test-Path $loaderDir)) {
     New-Item -ItemType Directory -Path $loaderDir -Force | Out-Null
 }
 
+# Build the loader content with proper path escaping
+$gitProfilePath = Join-Path $profileRepoPath "Profile.ps1"
 $loaderContent = @"
 # Synced PowerShell profile loader — managed by bootstrap.ps1
 # Edit the Git-based Profile.ps1 instead.
 
-`$gitProfile = "$profileRepoPath\\Profile.ps1"
+`$gitProfile = '$($gitProfilePath -replace "'", "''")'
 
 if (-not (Test-Path `$gitProfile)) {
     Write-Warning "Git-based profile not found: `$gitProfile"
+    Write-Warning "Run bootstrap.ps1 again to repair your profile setup."
 } else {
-    Invoke-Expression (Get-Content `$gitProfile -Raw)
+    try {
+        . `$gitProfile
+    } catch {
+        Write-Warning "Failed to load Git-based profile: `$_"
+    }
 }
 "@
 
