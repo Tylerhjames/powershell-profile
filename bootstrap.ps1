@@ -74,10 +74,34 @@ function Ensure-PowerShell7 {
 
     if ($RelaunchIfNeeded -and $currentMajor -lt 7) {
         Write-Info "Relaunching bootstrap under PowerShell 7..."
-        try {
-            & pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "iwr '$bootstrapUrl' -UseBasicParsing | iex"
-        } catch {
-            Write-Err "Failed to relaunch bootstrap under PowerShell 7. $_"
+        
+        # Refresh PATH to pick up newly installed pwsh
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+        
+        # Try to find pwsh after PATH refresh
+        $pwshCmd = Get-Command pwsh -ErrorAction SilentlyContinue
+        if (-not $pwshCmd) {
+            # Fallback to common installation paths
+            $commonPaths = @(
+                "$env:ProgramFiles\PowerShell\7\pwsh.exe",
+                "${env:ProgramFiles(x86)}\PowerShell\7\pwsh.exe"
+            )
+            foreach ($path in $commonPaths) {
+                if (Test-Path $path) {
+                    $pwshCmd = Get-Command $path
+                    break
+                }
+            }
+        }
+        
+        if ($pwshCmd) {
+            try {
+                & $pwshCmd.Source -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "iwr '$bootstrapUrl' -UseBasicParsing | iex"
+            } catch {
+                Write-Err "Failed to relaunch bootstrap under PowerShell 7. $_"
+            }
+        } else {
+            Write-Err "PowerShell 7 was installed but cannot be found. Please close this window and run 'pwsh' manually."
         }
         exit
     }
