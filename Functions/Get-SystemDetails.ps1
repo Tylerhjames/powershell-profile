@@ -58,16 +58,16 @@ function Get-SystemDetails {
     Write-Host "`n┌─ CPU Information" -ForegroundColor DarkCyan
     $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
     
-    Write-Host "│  Processor        : " -NoNewline -ForegroundColor Gray
+    Write-Host "│  Processor        : " -NoNewline -ForegroundColor DarkGray
     Write-Host $cpu.Name.Trim() -ForegroundColor White
-    Write-Host "│  Cores / Threads  : " -NoNewline -ForegroundColor Gray
+    Write-Host "│  Cores / Threads  : " -NoNewline -ForegroundColor DarkGray
     Write-Host "$($cpu.NumberOfCores) cores / $($cpu.NumberOfLogicalProcessors) threads" -ForegroundColor White
-    Write-Host "│  Base Speed       : " -NoNewline -ForegroundColor Gray
+    Write-Host "│  Base Speed       : " -NoNewline -ForegroundColor DarkGray
     Write-Host "$([math]::Round($cpu.MaxClockSpeed / 1000, 2)) GHz" -ForegroundColor White
     
     # Current CPU load
     $cpuLoad = (Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average
-    Write-Host "│  Current Load     : " -NoNewline -ForegroundColor Gray
+    Write-Host "│  Current Load     : " -NoNewline -ForegroundColor DarkGray
     
     if ($cpuLoad -lt 50) {
         Write-Host "$cpuLoad% " -NoNewline -ForegroundColor Green
@@ -92,12 +92,12 @@ function Get-SystemDetails {
     $usedRAM = $totalRAM - $availableRAM
     $ramUsagePercent = [math]::Round(($usedRAM / $totalRAM) * 100, 1)
     
-    Write-Host "│  Total Installed  : " -NoNewline -ForegroundColor Gray
+    Write-Host "│  Total Installed  : " -NoNewline -ForegroundColor DarkGray
     Write-Host "$totalRAM GB" -ForegroundColor White
-    Write-Host "│  Used             : " -NoNewline -ForegroundColor Gray
+    Write-Host "│  Used             : " -NoNewline -ForegroundColor DarkGray
     Write-Host "$usedRAM GB " -NoNewline -ForegroundColor White
     Write-Host "($ramUsagePercent%)" -ForegroundColor DarkGray
-    Write-Host "│  Available        : " -NoNewline -ForegroundColor Gray
+    Write-Host "│  Available        : " -NoNewline -ForegroundColor DarkGray
     Write-Host "$availableRAM GB " -NoNewline -ForegroundColor White
     Write-Host "($([math]::Round(100 - $ramUsagePercent, 1))%)" -ForegroundColor DarkGray
     
@@ -106,7 +106,7 @@ function Get-SystemDetails {
     
     if ($ramModules) {
         Write-Host "│" -ForegroundColor DarkCyan
-        Write-Host "│  Installed Modules:" -ForegroundColor Gray
+        Write-Host "│  Installed Modules:" -ForegroundColor DarkGray
         
         foreach ($module in $ramModules) {
             $size = [math]::Round($module.Capacity / 1GB, 0)
@@ -116,11 +116,11 @@ function Get-SystemDetails {
             $partNumber = if ($module.PartNumber) { $module.PartNumber.Trim() } else { "N/A" }
             
             Write-Host "│    ├─ $slot" -ForegroundColor DarkCyan
-            Write-Host "│    │  Capacity   : " -NoNewline -ForegroundColor Gray
+            Write-Host "│    │  Capacity   : " -NoNewline -ForegroundColor DarkGray
             Write-Host "$size GB" -ForegroundColor White
-            Write-Host "│    │  Speed      : " -NoNewline -ForegroundColor Gray
+            Write-Host "│    │  Speed      : " -NoNewline -ForegroundColor DarkGray
             Write-Host "$speed MHz" -ForegroundColor White
-            Write-Host "│    │  Type       : " -NoNewline -ForegroundColor Gray
+            Write-Host "│    │  Type       : " -NoNewline -ForegroundColor DarkGray
             
             $memType = switch ($module.MemoryType) {
                 20 { "DDR" }
@@ -132,9 +132,9 @@ function Get-SystemDetails {
             }
             Write-Host $memType -ForegroundColor White
             
-            Write-Host "│    │  Manufacturer: " -NoNewline -ForegroundColor Gray
+            Write-Host "│    │  Manufacturer: " -NoNewline -ForegroundColor DarkGray
             Write-Host $manufacturer -ForegroundColor White
-            Write-Host "│    │  Part Number: " -NoNewline -ForegroundColor Gray
+            Write-Host "│    │  Part Number: " -NoNewline -ForegroundColor DarkGray
             Write-Host $partNumber -ForegroundColor White
         }
         
@@ -144,7 +144,7 @@ function Get-SystemDetails {
         $emptySlots = $totalSlots - $usedSlots
         
         Write-Host "│" -ForegroundColor DarkCyan
-        Write-Host "│  Slot Usage       : " -NoNewline -ForegroundColor Gray
+        Write-Host "│  Slot Usage       : " -NoNewline -ForegroundColor DarkGray
         Write-Host "$usedSlots of $totalSlots slots used " -NoNewline -ForegroundColor White
         
         if ($emptySlots -gt 0) {
@@ -172,7 +172,7 @@ function Get-SystemDetails {
             Write-Host "│  💡 TIP           : " -NoNewline -ForegroundColor DarkCyan
             $firstModule = $ramModules[0]
             $recommendSize = [math]::Round($firstModule.Capacity / 1GB, 0)
-            Write-Host "Consider adding $recommendSize GB modules to empty slots for better performance" -ForegroundColor Gray
+            Write-Host "Consider adding $recommendSize GB modules to empty slots for better performance" -ForegroundColor DarkGray
         }
     }
     Write-Host "└─" -ForegroundColor DarkCyan
@@ -201,11 +201,11 @@ function Get-SystemDetails {
         
         Write-Host "│" -ForegroundColor DarkCyan
         Write-Host "│  ═══ Disk $diskNumber ═══" -ForegroundColor DarkCyan
-        Write-Host "│  Model         : " -NoNewline -ForegroundColor Gray
+        Write-Host "│  Model         : " -NoNewline -ForegroundColor DarkGray
         Write-Host $model -ForegroundColor White
-        Write-Host "│  Capacity      : " -NoNewline -ForegroundColor Gray
+        Write-Host "│  Capacity      : " -NoNewline -ForegroundColor DarkGray
         Write-Host "$size GB" -ForegroundColor White
-        Write-Host "│  Type          : " -NoNewline -ForegroundColor Gray
+        Write-Host "│  Type          : " -NoNewline -ForegroundColor DarkGray
         
         $typeDisplay = switch ($mediaType) {
             "HDD" { "HDD (Hard Disk Drive)" }
@@ -215,11 +215,11 @@ function Get-SystemDetails {
         }
         Write-Host $typeDisplay -ForegroundColor White
         
-        Write-Host "│  Interface     : " -NoNewline -ForegroundColor Gray
+        Write-Host "│  Interface     : " -NoNewline -ForegroundColor DarkGray
         Write-Host $busType -ForegroundColor White
-        Write-Host "│  Serial Number : " -NoNewline -ForegroundColor Gray
+        Write-Host "│  Serial Number : " -NoNewline -ForegroundColor DarkGray
         Write-Host $serialNumber -ForegroundColor White
-        Write-Host "│  Health Status : " -NoNewline -ForegroundColor Gray
+        Write-Host "│  Health Status : " -NoNewline -ForegroundColor DarkGray
         
         switch ($health) {
             "Healthy" { Write-Host "✓ $health" -ForegroundColor Green }
@@ -234,7 +234,7 @@ function Get-SystemDetails {
         
         if ($volumes) {
             Write-Host "│" -ForegroundColor DarkCyan
-            Write-Host "│  Volumes:" -ForegroundColor Gray
+            Write-Host "│  Volumes:" -ForegroundColor DarkGray
             
             foreach ($volume in $volumes) {
                 $driveLetter = $volume.DriveLetter
@@ -244,9 +244,9 @@ function Get-SystemDetails {
                 $volumeUsedPercent = [math]::Round(($volumeUsed / $volumeSize) * 100, 1)
                 
                 Write-Host "│    ├─ Drive $driveLetter`:" -ForegroundColor DarkCyan
-                Write-Host "│    │  Total  : " -NoNewline -ForegroundColor Gray
+                Write-Host "│    │  Total  : " -NoNewline -ForegroundColor DarkGray
                 Write-Host "$volumeSize GB" -ForegroundColor White
-                Write-Host "│    │  Used   : " -NoNewline -ForegroundColor Gray
+                Write-Host "│    │  Used   : " -NoNewline -ForegroundColor DarkGray
                 Write-Host "$volumeUsed GB " -NoNewline -ForegroundColor White
                 
                 if ($volumeUsedPercent -lt 70) {
@@ -257,7 +257,7 @@ function Get-SystemDetails {
                     Write-Host "($volumeUsedPercent%)" -ForegroundColor Red
                 }
                 
-                Write-Host "│    │  Free   : " -NoNewline -ForegroundColor Gray
+                Write-Host "│    │  Free   : " -NoNewline -ForegroundColor DarkGray
                 Write-Host "$volumeFree GB " -NoNewline -ForegroundColor White
                 Write-Host "($([math]::Round(100 - $volumeUsedPercent, 1))%)" -ForegroundColor DarkGray
                 
@@ -290,7 +290,7 @@ function Get-SystemDetails {
     $unhealthyDisks = $physicalDisks | Where-Object { $_.HealthStatus -ne "Healthy" }
     if ($unhealthyDisks) { $issues += "Disk health warning" }
     
-    Write-Host "│  Status           : " -NoNewline -ForegroundColor Gray
+    Write-Host "│  Status           : " -NoNewline -ForegroundColor DarkGray
     
     if ($issues.Count -eq 0) {
         Write-Host "✓ All systems nominal" -ForegroundColor Green
