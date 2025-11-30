@@ -1,5 +1,3 @@
-# Save this entire block to: Show-TechMenu.ps1
-
 function Show-TechMenu {
     <#
     .SYNOPSIS
@@ -128,9 +126,13 @@ function Show-TechMenu {
         }
         @{ 
             Name        = "System Info"
-            Description = "Display system information"
+            Description = "Comprehensive system details"
             Command     = { 
-                Get-ComputerInfo | Select-Object CsName, OsName, OsVersion, OsArchitecture, CsProcessors | Format-List
+                if (Get-Command Get-SystemDetails -ErrorAction SilentlyContinue) {
+                    Get-SystemDetails
+                } else {
+                    Get-ComputerInfo | Select-Object CsName, OsName, OsVersion, OsArchitecture, CsProcessors | Format-List
+                }
             }
             Icon        = "💻"
         }
@@ -179,16 +181,21 @@ function Show-TechMenu {
         
         Clear-Host
         
-        # Header
-        Write-Host "`n╔═══════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-        Write-Host "║" -NoNewline -ForegroundColor Cyan
-        Write-Host "            🛠️  TECHNICIAN TOOLKIT  🛠️            " -NoNewline -ForegroundColor White
-        Write-Host "║" -ForegroundColor Cyan
-        Write-Host "╚═══════════════════════════════════════════════════════════════╝`n" -ForegroundColor Cyan
+        # Header with proper alignment
+        $boxWidth = 63
+        $titleText = "🛠️  TECHNICIAN TOOLKIT  🛠️"
+        $padding = [math]::Floor(($boxWidth - $titleText.Length) / 2)
+        $paddedTitle = (" " * $padding) + $titleText + (" " * ($boxWidth - $titleText.Length - $padding))
+        
+        Write-Host "`n╔$('═' * $boxWidth)╗" -ForegroundColor DarkCyan
+        Write-Host "║$paddedTitle║" -ForegroundColor DarkCyan
+        Write-Host "╚$('═' * $boxWidth)╝`n" -ForegroundColor DarkCyan
         
         Write-Host "  Use " -NoNewline -ForegroundColor Gray
         Write-Host "↑↓←→" -NoNewline -ForegroundColor Yellow
-        Write-Host " arrow keys to navigate, " -NoNewline -ForegroundColor Gray
+        Write-Host " or " -NoNewline -ForegroundColor Gray
+        Write-Host "number keys" -NoNewline -ForegroundColor Yellow
+        Write-Host " to navigate, " -NoNewline -ForegroundColor Gray
         Write-Host "Enter" -NoNewline -ForegroundColor Yellow
         Write-Host " to select, " -NoNewline -ForegroundColor Gray
         Write-Host "Q" -NoNewline -ForegroundColor Yellow
@@ -218,7 +225,7 @@ function Show-TechMenu {
                     }
                     else {
                         Write-Host "   " -NoNewline
-                        Write-Host $displayText.PadRight($columnWidth - 3) -NoNewline -ForegroundColor Cyan
+                        Write-Host $displayText.PadRight($columnWidth - 3) -NoNewline -ForegroundColor DarkCyan
                     }
                 }
                 else {
@@ -240,10 +247,10 @@ function Show-TechMenu {
             Write-Host ""
         }
         
-        Write-Host "`n" + ("─" * 63) -ForegroundColor DarkGray
+        Write-Host "`n$('─' * $boxWidth)" -ForegroundColor DarkGray
         Write-Host "  Selected: " -NoNewline -ForegroundColor Gray
         Write-Host "$($Items[$SelectedIndex].Icon) $($Items[$SelectedIndex].Name)" -ForegroundColor Yellow
-        Write-Host ("─" * 63) -ForegroundColor DarkGray
+        Write-Host "$('─' * $boxWidth)" -ForegroundColor DarkGray
     }
     
     # ══════════════════════════════════════════════════════════════════════════
@@ -301,9 +308,9 @@ function Show-TechMenu {
             'Enter' {
                 Clear-Host
                 $selectedItem = $menuItems[$selectedIndex]
-                Write-Host "`n═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
-                Write-Host "  Executing: $($selectedItem.Icon) $($selectedItem.Name)" -ForegroundColor Cyan
-                Write-Host "═══════════════════════════════════════════════════════════════`n" -ForegroundColor Cyan
+                Write-Host "`n$('═' * 63)" -ForegroundColor DarkCyan
+                Write-Host "  Executing: $($selectedItem.Icon) $($selectedItem.Name)" -ForegroundColor DarkCyan
+                Write-Host "$('═' * 63)`n" -ForegroundColor DarkCyan
                 
                 try {
                     & $selectedItem.Command
@@ -311,7 +318,7 @@ function Show-TechMenu {
                     Write-Host "`n❌ Error: $_" -ForegroundColor Red
                 }
                 
-                Write-Host "`n" + ("─" * 63) -ForegroundColor DarkGray
+                Write-Host "`n$('─' * 63)" -ForegroundColor DarkGray
                 Write-Host "Press any key to return to menu..." -ForegroundColor Gray
                 $null = [Console]::ReadKey($true)
             }
@@ -328,9 +335,9 @@ function Show-TechMenu {
                     $selectedIndex = $num - 1
                     Clear-Host
                     $selectedItem = $menuItems[$selectedIndex]
-                    Write-Host "`n═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
-                    Write-Host "  Executing: $($selectedItem.Icon) $($selectedItem.Name)" -ForegroundColor Cyan
-                    Write-Host "═══════════════════════════════════════════════════════════════`n" -ForegroundColor Cyan
+                    Write-Host "`n$('═' * 63)" -ForegroundColor DarkCyan
+                    Write-Host "  Executing: $($selectedItem.Icon) $($selectedItem.Name)" -ForegroundColor DarkCyan
+                    Write-Host "$('═' * 63)`n" -ForegroundColor DarkCyan
                     
                     try {
                         & $selectedItem.Command
@@ -338,7 +345,7 @@ function Show-TechMenu {
                         Write-Host "`n❌ Error: $_" -ForegroundColor Red
                     }
                     
-                    Write-Host "`n" + ("─" * 63) -ForegroundColor DarkGray
+                    Write-Host "`n$('─' * 63)" -ForegroundColor DarkGray
                     Write-Host "Press any key to return to menu..." -ForegroundColor Gray
                     $null = [Console]::ReadKey($true)
                 }
