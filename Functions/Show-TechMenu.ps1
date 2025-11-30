@@ -1,3 +1,5 @@
+# Save this entire block to: Show-TechMenu.ps1
+
 function Show-TechMenu {
     <#
     .SYNOPSIS
@@ -35,19 +37,46 @@ function Show-TechMenu {
         @{ 
             Name        = "Network Test"
             Description = "LAN/WAN/Internet speed testing"
-            Command     = { Test-Network }
+            Command     = { 
+                if (Get-Command Test-Network -ErrorAction SilentlyContinue) {
+                    Test-Network
+                } elseif (Get-Command Invoke-NetTest -ErrorAction SilentlyContinue) {
+                    Invoke-NetTest
+                } else {
+                    Write-Host "❌ Test-Network function not found. Try: rpl" -ForegroundColor Red
+                }
+            }
             Icon        = "🌐"
         }
         @{ 
             Name        = "Public IP"
             Description = "Show public IP address"
-            Command     = { Invoke-Expression 'publicip' }
+            Command     = { 
+                if (Get-Command publicip -ErrorAction SilentlyContinue) {
+                    & publicip
+                } else {
+                    try {
+                        $ip = (Invoke-RestMethod 'https://api.ipify.org?format=json').ip
+                        Write-Host "`n✓ Public IP: $ip`n" -ForegroundColor Green
+                    } catch {
+                        Write-Host "❌ Failed to get IP: $_" -ForegroundColor Red
+                    }
+                }
+            }
             Icon        = "🔍"
         }
         @{ 
             Name        = "Renew Network"
             Description = "Release and renew DHCP"
-            Command     = { Invoke-Expression 'renew-safe' }
+            Command     = { 
+                if (Get-Command renew-safe -ErrorAction SilentlyContinue) {
+                    & renew-safe
+                } else {
+                    ipconfig /release
+                    Start-Sleep 2
+                    ipconfig /renew
+                }
+            }
             Icon        = "🔄"
         }
         @{ 
@@ -60,27 +89,49 @@ function Show-TechMenu {
             Name        = "Email Auth Check"
             Description = "Test SPF/DKIM/DMARC records"
             Command     = { 
-                $domain = Read-Host "Enter domain to check"
-                if ($domain) { Test-EmailAuthentication -Domain $domain }
+                $domain = Read-Host "`nEnter domain to check"
+                if ($domain) {
+                    if (Get-Command Test-EmailAuthentication -ErrorAction SilentlyContinue) {
+                        Test-EmailAuthentication -Domain $domain
+                    } elseif (Get-Command Test-EmailDNS -ErrorAction SilentlyContinue) {
+                        Test-EmailDNS -Domain $domain
+                    } else {
+                        Write-Host "❌ Email auth function not found. Try: rpl" -ForegroundColor Red
+                    }
+                }
             }
             Icon        = "📧"
         }
         @{ 
             Name        = "Network Scanner"
             Description = "Scan LAN for active hosts"
-            Command     = { Scan-Network }
+            Command     = { 
+                if (Get-Command Scan-Network -ErrorAction SilentlyContinue) {
+                    Scan-Network
+                } else {
+                    Write-Host "❌ Scan-Network function not found. Try: rpl" -ForegroundColor Red
+                }
+            }
             Icon        = "📡"
         }
         @{ 
             Name        = "Speed Test"
             Description = "Quick internet speed test"
-            Command     = { Invoke-InternetSpeedTest }
+            Command     = { 
+                if (Get-Command Invoke-InternetSpeedTest -ErrorAction SilentlyContinue) {
+                    Invoke-InternetSpeedTest
+                } else {
+                    Write-Host "❌ Speedtest function not found. Try: rpl" -ForegroundColor Red
+                }
+            }
             Icon        = "⚡"
         }
         @{ 
             Name        = "System Info"
             Description = "Display system information"
-            Command     = { Get-ComputerInfo | Select-Object CsName, OsName, OsVersion, OsArchitecture | Format-List }
+            Command     = { 
+                Get-ComputerInfo | Select-Object CsName, OsName, OsVersion, OsArchitecture, CsProcessors | Format-List
+            }
             Icon        = "💻"
         }
         # ADD MORE ITEMS HERE - they'll automatically flow into columns!
@@ -195,14 +246,6 @@ function Show-TechMenu {
         Write-Host ("─" * 63) -ForegroundColor DarkGray
     }
     
-    function Get-KeyPress {
-        # Non-blocking key read
-        if ([Console]::KeyAvailable) {
-            return [Console]::ReadKey($true)
-        }
-        return $null
-    }
-    
     # ══════════════════════════════════════════════════════════════════════════
     # Main Menu Loop
     # ══════════════════════════════════════════════════════════════════════════
@@ -228,61 +271,35 @@ function Show-TechMenu {
         
         switch ($key.Key) {
             'UpArrow' {
-                # Move up in current column
                 $selectedIndex -= 1
-                if ($selectedIndex -lt 0) {
-                    $selectedIndex = $menuItems.Count - 1
-                }
+                if ($selectedIndex -lt 0) { $selectedIndex = $menuItems.Count - 1 }
             }
             
             'DownArrow' {
-                # Move down in current column
                 $selectedIndex += 1
-                if ($selectedIndex -ge $menuItems.Count) {
-                    $selectedIndex = 0
-                }
+                if ($selectedIndex -ge $menuItems.Count) { $selectedIndex = 0 }
             }
             
             'LeftArrow' {
-                # Move left to previous column
                 $currentRow = $selectedIndex % $rows
                 $currentCol = [math]::Floor($selectedIndex / $rows)
-                
-                $newCol = ($currentCol - 1)
-                if ($newCol -lt 0) {
-                    $newCol = $Columns - 1
-                }
-                
+                $newCol = if ($currentCol -eq 0) { $Columns - 1 } else { $currentCol - 1 }
                 $newIndex = $currentRow + ($newCol * $rows)
-                
-                # Wrap to valid index
-                if ($newIndex -ge $menuItems.Count) {
-                    $newIndex = $menuItems.Count - 1
-                }
-                
+                if ($newIndex -ge $menuItems.Count) { $newIndex = $menuItems.Count - 1 }
                 $selectedIndex = $newIndex
             }
             
             'RightArrow' {
-                # Move right to next column
                 $currentRow = $selectedIndex % $rows
                 $currentCol = [math]::Floor($selectedIndex / $rows)
-                
                 $newCol = ($currentCol + 1) % $Columns
                 $newIndex = $currentRow + ($newCol * $rows)
-                
-                # Wrap to valid index
-                if ($newIndex -ge $menuItems.Count) {
-                    $newIndex = 0
-                }
-                
+                if ($newIndex -ge $menuItems.Count) { $newIndex = 0 }
                 $selectedIndex = $newIndex
             }
             
             'Enter' {
-                # Execute selected command
                 Clear-Host
-                
                 $selectedItem = $menuItems[$selectedIndex]
                 Write-Host "`n═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
                 Write-Host "  Executing: $($selectedItem.Icon) $($selectedItem.Name)" -ForegroundColor Cyan
@@ -290,9 +307,8 @@ function Show-TechMenu {
                 
                 try {
                     & $selectedItem.Command
-                }
-                catch {
-                    Write-Host "`n❌ Error executing command: $_" -ForegroundColor Red
+                } catch {
+                    Write-Host "`n❌ Error: $_" -ForegroundColor Red
                 }
                 
                 Write-Host "`n" + ("─" * 63) -ForegroundColor DarkGray
@@ -301,22 +317,16 @@ function Show-TechMenu {
             }
             
             'Q' {
-                # Quit
                 $running = $false
                 Clear-Host
                 Write-Host "`n✓ Exiting Technician Toolkit`n" -ForegroundColor Green
             }
             
             { $_ -match '^\d$' } {
-                # Number key pressed - direct selection
                 $num = [int]$key.KeyChar.ToString()
-                
                 if ($num -gt 0 -and $num -le $menuItems.Count) {
                     $selectedIndex = $num - 1
-                    
-                    # Auto-execute on number press
                     Clear-Host
-                    
                     $selectedItem = $menuItems[$selectedIndex]
                     Write-Host "`n═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
                     Write-Host "  Executing: $($selectedItem.Icon) $($selectedItem.Name)" -ForegroundColor Cyan
@@ -324,9 +334,8 @@ function Show-TechMenu {
                     
                     try {
                         & $selectedItem.Command
-                    }
-                    catch {
-                        Write-Host "`n❌ Error executing command: $_" -ForegroundColor Red
+                    } catch {
+                        Write-Host "`n❌ Error: $_" -ForegroundColor Red
                     }
                     
                     Write-Host "`n" + ("─" * 63) -ForegroundColor DarkGray
@@ -334,28 +343,12 @@ function Show-TechMenu {
                     $null = [Console]::ReadKey($true)
                 }
             }
-            
-            default {
-                # Ignore other keys
-            }
         }
     }
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Legacy Function (Backward Compatibility)
-# ══════════════════════════════════════════════════════════════════════════════
-
 function tech {
-    <#
-    .SYNOPSIS
-        Legacy menu function - calls Show-TechMenu
-    #>
     Show-TechMenu
 }
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Aliases
-# ══════════════════════════════════════════════════════════════════════════════
 
 Set-Alias -Name techmenu -Value Show-TechMenu -Scope Global
