@@ -88,7 +88,7 @@ function Get-SystemDetails {
     Write-Host "`n┌─ Memory (RAM)" -ForegroundColor DarkCyan
     
     $totalRAM = [math]::Round($computerInfo.TotalPhysicalMemory / 1GB, 2)
-    $availableRAM = [math]::Round($osInfo.FreePhysicalMemory / 1MB / 1024, 2)
+    $availableRAM = [math]::Round($osInfo.FreePhysicalMemory / 1KB / 1024 / 1024, 2)
     $usedRAM = $totalRAM - $availableRAM
     $ramUsagePercent = [math]::Round(($usedRAM / $totalRAM) * 100, 1)
     
@@ -106,7 +106,7 @@ function Get-SystemDetails {
     
     if ($ramModules) {
         Write-Host "│" -ForegroundColor DarkCyan
-        Write-Host "│  Installed Modules:" -ForegroundColor DarkGray
+        Write-Host "│  Installed Modules:" -ForegroundColor DarkCyan
         
         foreach ($module in $ramModules) {
             $size = [math]::Round($module.Capacity / 1GB, 0)
@@ -234,7 +234,7 @@ function Get-SystemDetails {
         
         if ($volumes) {
             Write-Host "│" -ForegroundColor DarkCyan
-            Write-Host "│  Volumes:" -ForegroundColor DarkGray
+            Write-Host "│  Volumes:" -ForegroundColor DarkCyan
             
             foreach ($volume in $volumes) {
                 $driveLetter = $volume.DriveLetter
