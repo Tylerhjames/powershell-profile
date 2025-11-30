@@ -57,19 +57,24 @@ function Test-Network {
         Write-Host ""
         Write-Host "  [Q] Quit`n" -ForegroundColor DarkGray
         
-        $choice = Read-Host "Choose an option"
-        
-        return switch ($choice) {
-            '1' { 'LAN' }
-            '2' { 'WAN' }
-            '3' { 'Internet' }
-            { $_ -match '^[Qq]$' } { $null }
-            default { 
-                Write-Host "Invalid choice. Please try again." -ForegroundColor Red
-                Start-Sleep 1
-                Show-TestMenu
+        do {
+            $choice = Read-Host "Choose an option"
+            
+            $result = switch ($choice) {
+                '1' { 'LAN'; break }
+                '2' { 'WAN'; break }
+                '3' { 'Internet'; break }
+                { $_ -match '^[Qq]$' } { $null; break }
+                default { 
+                    Write-Host "Invalid choice. Please try again." -ForegroundColor Red
+                    'retry'
+                }
             }
-        }
+            
+            if ($result -ne 'retry') {
+                return $result
+            }
+        } while ($true)
     }
     
     function Get-PublicServers {
