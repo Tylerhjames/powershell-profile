@@ -10,40 +10,43 @@ $script:RequiredModules = @('Terminal-Icons')  # Only load essentials at startup
 $script:LazyModules = @('Pester', 'Microsoft.PowerShell.SecretManagement', 'Microsoft.PowerShell.SecretStore')
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Auto-Pull from Git (Optimized)
+# Auto-Pull from Git (Silent)
 # ══════════════════════════════════════════════════════════════════════════════
 
-if (Test-Path "$ProfileRepo\.git") {
-    Push-Location $ProfileRepo -StackName ProfileSync
+$repo = "$HOME\Documents\Git\powershell-profile"
+if (Test-Path "$repo\.git") {
+    Push-Location $repo
     
-    # Skip unnecessary branch setup if already configured
-    $branch = git branch --show-current
-    if ($branch -eq 'main') {
-        $upstream = git rev-parse --abbrev-ref '@{u}' 2>$null
-        if (-not $upstream) {
-            git branch --set-upstream-to=origin/main main *>$null
-        }
+    # Set upstream if not configured
+    $upstream = git rev-parse --abbrev-ref '@{u}' 2>$null
+    if (-not $upstream) {
+        git branch --set-upstream-to=origin/main main 2>&1 | Out-Null
     }
     
-    # Quick fetch without verbose output
-    git fetch --quiet *>$null
+    # Fetch updates
+    git fetch --quiet 2>&1 | Out-Null
     
-    # Check for changes
-    $localCommit = git rev-parse HEAD 2>$null
-    $remoteCommit = git rev-parse '@{u}' 2>$null
-    $dirty = git diff --quiet HEAD; $LASTEXITCODE -ne 0
+    # Check for local changes
+    $hasChanges = git diff --quiet HEAD 2>$null
+    $exitCode = $LASTEXITCODE
     
-    if ($dirty) {
+    if ($exitCode -ne 0) {
         Write-Host "⚠ Local changes detected — skipping auto-update" -ForegroundColor Yellow
     }
-    elseif ($localCommit -ne $remoteCommit) {
-        git pull --ff-only --quiet *>$null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "✓ Profile updated from GitHub" -ForegroundColor DarkGreen
+    else {
+        # Check if behind remote
+        $localCommit = git rev-parse HEAD 2>$null
+        $remoteCommit = git rev-parse '@{u}' 2>$null
+        
+        if ($localCommit -ne $remoteCommit) {
+            git pull --ff-only --quiet 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "✓ Profile updated from GitHub" -ForegroundColor DarkGreen
+            }
         }
     }
     
-    Pop-Location -StackName ProfileSync
+    Pop-Location
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
