@@ -21,14 +21,14 @@
 # CONFIGURATION - Change this to match your tenant
 # =============================================================================
 
-$TenantName = "yakamapower"  # Change this! (e.g., if your SharePoint is contoso.sharepoint.com, use "contoso")
+$TenantName = "yakamapowercbit"  # Change this! (e.g., if your SharePoint is contoso.sharepoint.com, use "contoso")
 
 # Optional: Specify a site URL if you want to enable for a specific site
-$SpecificSiteURL = ""  # Example: "https://yakamapowercbit.sharepoint.com/sites/VendorFileUploadPortal"
+$SpecificSiteURL = # Example: ""
 
 # =============================================================================
 
-$AdminCenterURL = "https://yakamapowercbit-admin.sharepoint.com/"
+$AdminCenterURL = "https://yakamapowercbit-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx#/home"
 
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "SharePoint Request Files Setup" -ForegroundColor Cyan
