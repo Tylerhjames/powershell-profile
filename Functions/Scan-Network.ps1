@@ -202,20 +202,17 @@ function Scan-Network {
             }
         }
         
-        # Calculate subnet mask
-        $mask = [uint32]0xFFFFFFFF -shl $hostBits
-        $networkInt = $ipInt -band $mask
+        # Calculate subnet mask - use bitwise AND to ensure unsigned result
+        # Left shift can produce negative numbers, so we mask it with 0xFFFFFFFF
+        $mask = [uint32](0xFFFFFFFF -band (0xFFFFFFFF -shl $hostBits))
+        $networkInt = [uint32]($ipInt -band $mask)
         
         # Generate IP list efficiently
         $ips = [System.Collections.Generic.List[string]]::new([int]$hostCount)
         
         for ($i = 1; $i -le $hostCount; $i++) {
             try {
-                $hostInt = $networkInt + $i
-                
-                # Ensure we don't overflow - cast to uint32 explicitly
-                $hostInt = [uint32]$hostInt
-                
+                $hostInt = [uint32]($networkInt + $i)
                 # Convert back to IP address
                 $bytes = [System.BitConverter]::GetBytes($hostInt)
                 [Array]::Reverse($bytes)
