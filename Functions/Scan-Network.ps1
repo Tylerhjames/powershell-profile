@@ -224,7 +224,7 @@ function Scan-Network {
                 $ipAddr = [System.Net.IPAddress]::new($bytes)
                 $ips.Add($ipAddr.ToString())
             } catch {
-                Write-Warning "Skipped invalid IP at offset $i: $_"
+                Write-Warning "Skipped invalid IP at offset ${i}: $_"
                 continue
             }
         }
