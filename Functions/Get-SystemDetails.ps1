@@ -35,19 +35,19 @@ function Get-SystemDetails {
     $biosInfo = Get-CimInstance Win32_BIOS
     
     Write-Host "┌─ Computer Information" -ForegroundColor DarkCyan
-    Write-Host "│  Computer Name    : " -NoNewline -ForegroundColor Gray
+    Write-Host "│  Computer Name    : " -NoNewline -ForegroundColor DarkGray
     Write-Host $computerInfo.Name -ForegroundColor White
-    Write-Host "│  Manufacturer     : " -NoNewline -ForegroundColor Gray
+    Write-Host "│  Manufacturer     : " -NoNewline -ForegroundColor DarkGray
     Write-Host "$($computerInfo.Manufacturer) $($computerInfo.Model)" -ForegroundColor White
-    Write-Host "│  Serial Number    : " -NoNewline -ForegroundColor Gray
+    Write-Host "│  Serial Number    : " -NoNewline -ForegroundColor DarkGray
     Write-Host $biosInfo.SerialNumber -ForegroundColor White
-    Write-Host "│  OS               : " -NoNewline -ForegroundColor Gray
+    Write-Host "│  OS               : " -NoNewline -ForegroundColor DarkGray
     Write-Host "$($osInfo.Caption) ($($osInfo.OSArchitecture))" -ForegroundColor White
-    Write-Host "│  OS Build         : " -NoNewline -ForegroundColor Gray
+    Write-Host "│  OS Build         : " -NoNewline -ForegroundColor DarkGray
     Write-Host $osInfo.Version -ForegroundColor White
     
     $uptime = (Get-Date) - $osInfo.LastBootUpTime
-    Write-Host "│  Uptime           : " -NoNewline -ForegroundColor Gray
+    Write-Host "│  Uptime           : " -NoNewline -ForegroundColor DarkGray
     Write-Host "$($uptime.Days)d $($uptime.Hours)h $($uptime.Minutes)m" -ForegroundColor White
     Write-Host "└─" -ForegroundColor DarkCyan
     
@@ -87,8 +87,9 @@ function Get-SystemDetails {
     
     Write-Host "`n┌─ Memory (RAM)" -ForegroundColor DarkCyan
     
+    # FreePhysicalMemory is in KB, so divide by 1024 twice: KB -> MB -> GB
     $totalRAM = [math]::Round($computerInfo.TotalPhysicalMemory / 1GB, 2)
-    $availableRAM = [math]::Round($osInfo.FreePhysicalMemory / 1KB / 1024 / 1024, 2)
+    $availableRAM = [math]::Round($osInfo.FreePhysicalMemory / 1024 / 1024, 2)
     $usedRAM = $totalRAM - $availableRAM
     $ramUsagePercent = [math]::Round(($usedRAM / $totalRAM) * 100, 1)
     

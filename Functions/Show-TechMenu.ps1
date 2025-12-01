@@ -329,9 +329,35 @@ function Show-TechMenu {
                 Write-Host "`n✓ Exiting Technician Toolkit`n" -ForegroundColor Green
             }
             
-            { $_ -match '^\d$' } {
-                $num = [int]$key.KeyChar.ToString()
-                if ($num -gt 0 -and $num -le $menuItems.Count) {
+            { $key.KeyChar -match '^\d
+                    Clear-Host
+                    $selectedItem = $menuItems[$selectedIndex]
+                    Write-Host "`n$('═' * 63)" -ForegroundColor DarkCyan
+                    Write-Host "  Executing: $($selectedItem.Icon) $($selectedItem.Name)" -ForegroundColor DarkCyan
+                    Write-Host "$('═' * 63)`n" -ForegroundColor DarkCyan
+                    
+                    try {
+                        & $selectedItem.Command
+                    } catch {
+                        Write-Host "`n❌ Error: $_" -ForegroundColor Red
+                    }
+                    
+                    Write-Host "`n$('─' * 63)" -ForegroundColor DarkGray
+                    Write-Host "Press any key to return to menu..." -ForegroundColor Gray
+                    $null = [Console]::ReadKey($true)
+                }
+            }
+        }
+    }
+}
+
+function tech {
+    Show-TechMenu
+}
+
+Set-Alias -Name techmenu -Value Show-TechMenu -Scope Global } {
+                $num = [int]::Parse($key.KeyChar.ToString())
+                if ($num -ge 1 -and $num -le $menuItems.Count) {
                     $selectedIndex = $num - 1
                     Clear-Host
                     $selectedItem = $menuItems[$selectedIndex]
