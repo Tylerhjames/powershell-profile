@@ -136,7 +136,6 @@ function Show-TechMenu {
             }
             Icon        = "💻"
         }
-        # ADD MORE ITEMS HERE - they'll automatically flow into columns!
     )
     
     # ══════════════════════════════════════════════════════════════════════════
@@ -146,15 +145,11 @@ function Show-TechMenu {
     function Get-OptimalColumns {
         param([int]$ItemCount, [int]$TerminalWidth)
         
-        # Each item needs ~35 chars (icon + number + name)
         $itemWidth = 35
         $maxCols = [math]::Floor($TerminalWidth / $itemWidth)
-        
-        # Limit to reasonable max
         $maxCols = [math]::Min($maxCols, 4)
         $maxCols = [math]::Max($maxCols, 1)
         
-        # Calculate optimal columns to minimize empty cells
         $optimalCols = 1
         $minWaste = $ItemCount
         
@@ -181,7 +176,6 @@ function Show-TechMenu {
         
         Clear-Host
         
-        # Header with proper alignment
         $boxWidth = 63
         $titleText = "🛠️  TECHNICIAN TOOLKIT  🛠️"
         $padding = [math]::Floor(($boxWidth - $titleText.Length) / 2)
@@ -205,11 +199,9 @@ function Show-TechMenu {
         Write-Host "Q" -NoNewline -ForegroundColor Yellow
         Write-Host " to quit`n" -ForegroundColor Gray
         
-        # Calculate layout
         $rows = [math]::Ceiling($Items.Count / $ColumnCount)
         $columnWidth = 35
         
-        # Display items in columns
         for ($row = 0; $row -lt $rows; $row++) {
             for ($col = 0; $col -lt $ColumnCount; $col++) {
                 $index = $row + ($col * $rows)
@@ -218,11 +210,9 @@ function Show-TechMenu {
                     $item = $Items[$index]
                     $isSelected = ($index -eq $SelectedIndex)
                     
-                    # Format item display
                     $displayNum = $index + 1
                     $displayText = "  $($item.Icon) [$displayNum] $($item.Name)"
                     
-                    # Highlight selected item
                     if ($isSelected) {
                         Write-Host " ► " -NoNewline -ForegroundColor Yellow
                         Write-Host $displayText.PadRight($columnWidth - 3) -NoNewline -BackgroundColor DarkGray -ForegroundColor White
@@ -238,7 +228,6 @@ function Show-TechMenu {
             }
             Write-Host ""
             
-            # Show description for selected item on this row
             for ($col = 0; $col -lt $ColumnCount; $col++) {
                 $index = $row + ($col * $rows)
                 
@@ -262,23 +251,18 @@ function Show-TechMenu {
     # Main Menu Loop
     # ══════════════════════════════════════════════════════════════════════════
     
-    # Determine column count
     if ($Columns -eq 0) {
         $terminalWidth = [Console]::WindowWidth
         $Columns = Get-OptimalColumns -ItemCount $menuItems.Count -TerminalWidth $terminalWidth
     }
     
-    # Calculate rows for navigation
     $rows = [math]::Ceiling($menuItems.Count / $Columns)
-    
-    # Menu state
     $selectedIndex = 0
     $running = $true
     
     while ($running) {
         Show-Menu -Items $menuItems -SelectedIndex $selectedIndex -ColumnCount $Columns
         
-        # Wait for key press
         $key = [Console]::ReadKey($true)
         
         switch ($key.Key) {
@@ -337,62 +321,36 @@ function Show-TechMenu {
                 Write-Host "`n✓ Exiting Technician Toolkit`n" -ForegroundColor Green
             }
             
-            { $key.KeyChar -match '^\d
-                    Clear-Host
-                    $selectedItem = $menuItems[$selectedIndex]
-                    Write-Host "`n$('═' * 63)" -ForegroundColor DarkCyan
-                    Write-Host "  Executing: $($selectedItem.Icon) $($selectedItem.Name)" -ForegroundColor DarkCyan
-                    Write-Host "$('═' * 63)`n" -ForegroundColor DarkCyan
-                    
-                    try {
-                        & $selectedItem.Command
-                    } catch {
-                        Write-Host "`n❌ Error: $_" -ForegroundColor Red
+            default {
+                if ($key.KeyChar -match '^\d$') {
+                    $num = [int]::Parse($key.KeyChar.ToString())
+                    if ($num -ge 1 -and $num -le $menuItems.Count) {
+                        $selectedIndex = $num - 1
+                        Clear-Host
+                        $selectedItem = $menuItems[$selectedIndex]
+                        Write-Host "`n" -NoNewline
+                        Write-Host ("═" * 63) -ForegroundColor DarkCyan
+                        Write-Host "  Executing: $($selectedItem.Icon) $($selectedItem.Name)" -ForegroundColor DarkCyan
+                        Write-Host ("═" * 63) -NoNewline -ForegroundColor DarkCyan
+                        Write-Host "`n"
+                        
+                        try {
+                            & $selectedItem.Command
+                        } catch {
+                            Write-Host "`n❌ Error: $_" -ForegroundColor Red
+                        }
+                        
+                        Write-Host "`n" -NoNewline
+                        Write-Host ("─" * 63) -ForegroundColor DarkGray
+                        Write-Host "Press any key to return to menu..." -ForegroundColor Gray
+                        $null = [Console]::ReadKey($true)
                     }
-                    
-                    Write-Host "`n$('─' * 63)" -ForegroundColor DarkGray
-                    Write-Host "Press any key to return to menu..." -ForegroundColor Gray
-                    $null = [Console]::ReadKey($true)
                 }
             }
         }
     }
 }
 
-function tech {
-    Show-TechMenu
-}
-
-Set-Alias -Name techmenu -Value Show-TechMenu -Scope Global } {
-                $num = [int]::Parse($key.KeyChar.ToString())
-                if ($num -ge 1 -and $num -le $menuItems.Count) {
-                    $selectedIndex = $num - 1
-                    Clear-Host
-                    $selectedItem = $menuItems[$selectedIndex]
-                    Write-Host "`n" -NoNewline
-                    Write-Host ("═" * 63) -ForegroundColor DarkCyan
-                    Write-Host "  Executing: $($selectedItem.Icon) $($selectedItem.Name)" -ForegroundColor DarkCyan
-                    Write-Host ("═" * 63) -NoNewline -ForegroundColor DarkCyan
-                    Write-Host "`n"
-                    
-                    try {
-                        & $selectedItem.Command
-                    } catch {
-                        Write-Host "`n❌ Error: $_" -ForegroundColor Red
-                    }
-                    
-                    Write-Host "`n" -NoNewline
-                    Write-Host ("─" * 63) -ForegroundColor DarkGray
-                    Write-Host "Press any key to return to menu..." -ForegroundColor Gray
-                    $null = [Console]::ReadKey($true)
-                }
-            }
-        }
-    }
-}
-
-function tech {
-    Show-TechMenu
-}
-
-Set-Alias -Name techmenu -Value Show-TechMenu -Scope Global
+# Create aliases
+New-Alias -Name tech -Value Show-TechMenu -Force -Scope Global
+New-Alias -Name techmenu -Value Show-TechMenu -Force -Scope Global
