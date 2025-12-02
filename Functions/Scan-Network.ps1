@@ -10,9 +10,8 @@ function Scan-Network {
         
         Features:
         - ARP cache clearing for accurate MAC discovery
-        - Persistent vendor cache to avoid repeated API calls
+        - IEEE OUI database for vendor lookup (no API calls needed)
         - Quick scan mode (skip port scanning)
-        - Offline mode (local vendor DB only)
     
     .PARAMETER Ports
         Array of ports to scan. Default: 22,80,443,3389,445,139
@@ -23,11 +22,11 @@ function Scan-Network {
     .PARAMETER QuickScan
         Skip port scanning for faster results (ping + MAC only)
     
-    .PARAMETER NoVendorLookup
-        Skip vendor API lookups (uses local database only)
-    
     .PARAMETER NoCacheClear
         Skip ARP cache clearing (faster but may have stale data)
+    
+    .PARAMETER OUIFilePath
+        Path to IEEE OUI database file. Default: oui.txt in script directory
     
     .EXAMPLE
         Scan-Network
@@ -40,6 +39,10 @@ function Scan-Network {
     .EXAMPLE
         Scan-Network -Ports @(80,443,8080) -ThrottleLimit 50
         Scans specific ports with 50 concurrent threads
+    
+    .EXAMPLE
+        Scan-Network -OUIFilePath "C:\path\to\oui.txt"
+        Uses a custom OUI database file
     #>
     
     [CmdletBinding()]
@@ -47,8 +50,8 @@ function Scan-Network {
         [int[]]$Ports = @(22, 80, 443, 3389, 445, 139),
         [int]$ThrottleLimit = 30,
         [switch]$QuickScan,
-        [switch]$NoVendorLookup,
-        [switch]$NoCacheClear
+        [switch]$NoCacheClear,
+        [string]$OUIFilePath = ""
     )
     
     # ══════════════════════════════════════════════════════════════════════════
@@ -80,48 +83,44 @@ function Scan-Network {
         }
     }
     
-    function Get-VendorCache {
+    function Load-OUIDatabase {
         <#
         .SYNOPSIS
-        Loads persistent vendor cache from disk
-        #>
-        
-        $cacheFile = Join-Path $env:TEMP "ps-network-scanner-vendor-cache.json"
-        
-        if (Test-Path $cacheFile) {
-            try {
-                $cache = Get-Content $cacheFile -Raw | ConvertFrom-Json -AsHashtable
-                $cacheAge = (Get-Date) - (Get-Item $cacheFile).LastWriteTime
-                
-                Write-Host "    📦 Loaded vendor cache ($($cache.Count) entries, age: $([math]::Round($cacheAge.TotalDays, 1))d)" -ForegroundColor DarkGray
-                
-                return $cache
-            } catch {
-                Write-Warning "Failed to load vendor cache: $_"
-                return @{}
-            }
-        }
-        
-        return @{}
-    }
-    
-    function Save-VendorCache {
-        <#
-        .SYNOPSIS
-        Saves vendor cache to disk
+        Loads IEEE OUI database from file into memory
         #>
         param(
             [Parameter(Mandatory)]
-            [hashtable]$Cache
+            [string]$FilePath
         )
         
-        $cacheFile = Join-Path $env:TEMP "ps-network-scanner-vendor-cache.json"
+        $ouiHash = @{}
+        $loadStart = Get-Date
         
         try {
-            $Cache | ConvertTo-Json | Set-Content $cacheFile -Force
-            Write-Host "`n    💾 Vendor cache saved ($($Cache.Count) entries)" -ForegroundColor DarkGreen
+            Write-Host "    📖 Loading OUI database from: $FilePath" -ForegroundColor DarkGray
+            
+            if (-not (Test-Path $FilePath)) {
+                throw "OUI file not found: $FilePath"
+            }
+            
+            $content = Get-Content $FilePath -ErrorAction Stop
+            
+            foreach ($line in $content) {
+                # Look for lines with "(base 16)" which contain the vendor info
+                if ($line -match '^([0-9A-F]{6})\s+\(base 16\)\s+(.+)$') {
+                    $prefix = $matches[1]
+                    $vendor = $matches[2].Trim()
+                    $ouiHash[$prefix] = $vendor
+                }
+            }
+            
+            $loadTime = ((Get-Date) - $loadStart).TotalSeconds
+            Write-Host "    ✓ Loaded $($ouiHash.Count) OUI entries in $([math]::Round($loadTime, 2))s" -ForegroundColor DarkGreen
+            
+            return $ouiHash
         } catch {
-            Write-Warning "Failed to save vendor cache: $_"
+            Write-Warning "Failed to load OUI database: $_"
+            return @{}
         }
     }
     
@@ -242,120 +241,25 @@ function Scan-Network {
     function Get-MACVendor {
         <#
         .SYNOPSIS
-        Looks up MAC address vendor (cache -> local DB -> API)
+        Looks up MAC address vendor from OUI database
         #>
         param(
             [string]$MAC,
-            [switch]$LocalOnly,
-            [hashtable]$Cache
+            [hashtable]$OUIDatabase
         )
         
         if (-not $MAC -or $MAC.Length -lt 8) { return "" }
+        if (-not $OUIDatabase -or $OUIDatabase.Count -eq 0) { return "" }
         
-        # Normalize MAC address
+        # Normalize MAC address and get first 6 hex digits (OUI prefix)
         $cleanMAC = ($MAC -replace '[:-]', '').ToUpper()
         if ($cleanMAC.Length -lt 6) { return "" }
         
-        # Check cache first
-        if ($Cache -and $Cache.ContainsKey($cleanMAC)) {
-            return $Cache[$cleanMAC]
-        }
-        
-        # Extended local database (faster, no rate limits)
         $prefix = $cleanMAC.Substring(0, 6)
-        $vendors = @{
-            # Major manufacturers
-            '000000' = 'Xerox'
-            '00005E' = 'IANA'
-            '0050F2' = 'Microsoft'
-            '001B63' = 'Apple'
-            '7CC3A1' = 'Apple'
-            '001CF0' = 'Apple'
-            'F01898' = 'Apple'
-            'B8F6B1' = 'Apple'
-            '3C0754' = 'Apple'
-            'A4C361' = 'Apple'
-            '00155D' = 'Microsoft'
-            '001DD8' = 'Microsoft'
-            '000D3A' = 'Microsoft'
-            '000C29' = 'VMware'
-            '005056' = 'VMware'
-            '080027' = 'VirtualBox'
-            '0A0027' = 'VirtualBox'
-            '001C42' = 'Parallels'
-            '00E04C' = 'Realtek'
-            '0090FE' = 'Kingston'
-            '525400' = 'QEMU/KVM'
-            
-            # IoT/Embedded
-            'A036BC' = 'Espressif (ESP32)'
-            '245EBE' = 'Espressif (ESP32)'
-            'E09E26' = 'Espressif (ESP8266)'
-            'FCEE28' = 'Espressif (ESP8266)'
-            '0CEA14' = 'Espressif (ESP8266)'
-            'CCEE28' = 'Espressif (ESP32)'
-            'B232E8' = 'Espressif (ESP32)'
-            'C44F33' = 'Espressif (ESP32)'
-            
-            # Networking equipment
-            '7C1175' = 'D-Link'
-            '249E7D' = 'TP-Link'
-            '54AF97' = 'TP-Link'
-            'C006C3' = 'TP-Link'
-            'B0BE76' = 'TP-Link'
-            '001E58' = 'Netgear'
-            '00146C' = 'Netgear'
-            '2C3033' = 'Netgear'
-            '44A56E' = 'Netgear'
-            'E0469A' = 'Netgear'
-            '9CDA3E' = 'Asus'
-            '2C56DC' = 'Asus'
-            '001EA6' = 'Cisco-Linksys'
-            '68EF43' = 'Cisco-Linksys'
-            'C0FFD4' = 'Ubiquiti'
-            '247F20' = 'Ubiquiti'
-            
-            # Mobile/Tablets
-            '283737' = 'Samsung'
-            '3C5A37' = 'Samsung'
-            '7C6193' = 'Samsung'
-            'E4121D' = 'Samsung'
-            '54E43A' = 'Google'
-            'DC2C26' = 'Google'
-            'F4F5E8' = 'Google'
-            'C46516' = 'Amazon'
-            'F0D2F1' = 'Amazon'
-            '78E103' = 'Amazon'
-        }
         
-        # Check local database
-        if ($vendors.ContainsKey($prefix)) {
-            $vendor = $vendors[$prefix]
-            # Add to cache
-            if ($Cache) {
-                $Cache[$cleanMAC] = $vendor
-            }
-            return $vendor
-        }
-        
-        # Skip API if requested
-        if ($LocalOnly) { return "" }
-        
-        # API lookup with error handling and timeout
-        try {
-            $apiUrl = "https://api.maclookup.app/v2/macs/$cleanMAC"
-            $response = Invoke-RestMethod -Uri $apiUrl -Method Get -TimeoutSec 2 -ErrorAction Stop
-            
-            if ($response.company) {
-                # Add to cache
-                if ($Cache) {
-                    $Cache[$cleanMAC] = $response.company
-                }
-                return $response.company
-            }
-        } catch {
-            # Silently fail back to empty string
-            # API failures are common (rate limits, network issues)
+        # Look up in OUI database
+        if ($OUIDatabase.ContainsKey($prefix)) {
+            return $OUIDatabase[$prefix]
         }
         
         return ""
@@ -410,8 +314,7 @@ function Scan-Network {
             
             [int[]]$PortList,
             [switch]$SkipPorts,
-            [switch]$NoVendorAPI,
-            [hashtable]$VendorCache
+            [hashtable]$OUIDatabase
         )
         
         # Quick ping test
@@ -458,7 +361,7 @@ function Scan-Network {
         # Vendor lookup
         $vendor = ""
         if ($mac) {
-            $vendor = Get-MACVendor -MAC $mac -LocalOnly:$NoVendorAPI -Cache $VendorCache
+            $vendor = Get-MACVendor -MAC $mac -OUIDatabase $OUIDatabase
         }
         
         return [PSCustomObject]@{
@@ -478,8 +381,34 @@ function Scan-Network {
     Write-Host "`n🔍 Network Scanner" -ForegroundColor DarkCyan
     Write-Host ("═" * 70) -ForegroundColor DarkCyan
     
-    # Load vendor cache
-    $vendorCache = Get-VendorCache
+    # Determine OUI file path
+    if (-not $OUIFilePath) {
+        # Try script directory first
+        $scriptDir = Split-Path -Parent $PSCommandPath
+        $defaultPaths = @(
+            (Join-Path $scriptDir "oui.txt"),
+            ".\oui.txt",
+            (Join-Path $env:USERPROFILE "oui.txt")
+        )
+        
+        foreach ($path in $defaultPaths) {
+            if (Test-Path $path) {
+                $OUIFilePath = $path
+                break
+            }
+        }
+        
+        if (-not $OUIFilePath) {
+            Write-Warning "OUI database file (oui.txt) not found. Vendor lookup will be disabled."
+            Write-Host "    Download from: https://standards-oui.ieee.org/oui/oui.txt" -ForegroundColor DarkGray
+        }
+    }
+    
+    # Load OUI database
+    $ouiDatabase = @{}
+    if ($OUIFilePath -and (Test-Path $OUIFilePath)) {
+        $ouiDatabase = Load-OUIDatabase -FilePath $OUIFilePath
+    }
     
     # Step 1: Detect interfaces
     Write-Host "`n[1/4] Detecting active network interfaces..." -ForegroundColor Yellow
@@ -505,7 +434,7 @@ function Scan-Network {
     # Interface selection
     $selectedInterface = $interfaces[0]
     if ($interfaces.Count -gt 1) {
-        Write-Host "`n❓ Multiple interfaces detected. Select one to scan:" -ForegroundColor Yellow
+        Write-Host "`n⚠ Multiple interfaces detected. Select one to scan:" -ForegroundColor Yellow
         
         for ($i = 0; $i -lt $interfaces.Count; $i++) {
             Write-Host "  [$($i+1)] $($interfaces[$i].Name) - $($interfaces[$i].CIDR)"
@@ -550,10 +479,10 @@ function Scan-Network {
         Write-Host "    Port scan: $($Ports -join ', ')" -ForegroundColor DarkGray
     }
     
-    if ($NoVendorLookup) {
-        Write-Host "    📦 Vendor lookup: Local database only" -ForegroundColor DarkGray
+    if ($ouiDatabase.Count -gt 0) {
+        Write-Host "    📦 Vendor lookup: IEEE OUI database ($($ouiDatabase.Count) entries)" -ForegroundColor DarkGray
     } else {
-        Write-Host "    🌐 Vendor lookup: API + local database + cache" -ForegroundColor DarkGray
+        Write-Host "    📦 Vendor lookup: Disabled (no OUI database)" -ForegroundColor DarkGray
     }
     
     Write-Host "    🧵 Threads: $ThrottleLimit" -ForegroundColor DarkGray
@@ -589,7 +518,7 @@ function Scan-Network {
         Invoke-Expression "function Get-HostInfo { $hostInfoDef }"
         
         # Execute scan
-        Get-HostInfo -IP $_ -PortList $using:Ports -SkipPorts:$using:QuickScan -NoVendorAPI:$using:NoVendorLookup -VendorCache $using:vendorCache
+        Get-HostInfo -IP $_ -PortList $using:Ports -SkipPorts:$using:QuickScan -OUIDatabase $using:ouiDatabase
         
         # Update progress (approximate, not exact due to parallelism)
         $script:completed++
@@ -604,9 +533,6 @@ function Scan-Network {
     Write-Progress -Activity "Scanning" -Completed
     
     $scanDuration = ((Get-Date) - $scanStart).TotalSeconds
-    
-    # Save vendor cache
-    Save-VendorCache -Cache $vendorCache
     
     # ══════════════════════════════════════════════════════════════════════════
     # Display Results
@@ -623,7 +549,12 @@ function Scan-Network {
     Write-Host "    • Hosts found:   $($results.Count)" -ForegroundColor Green
     Write-Host "    • Scan time:     $([math]::Round($scanDuration, 2))s" -ForegroundColor White
     Write-Host "    • Speed:         $([math]::Round($ips.Count / $scanDuration, 1)) hosts/sec" -ForegroundColor White
-    Write-Host "    • Vendor cache:  $($vendorCache.Count) entries`n" -ForegroundColor White
+    
+    if ($ouiDatabase.Count -gt 0) {
+        Write-Host "    • OUI database:  $($ouiDatabase.Count) entries`n" -ForegroundColor White
+    } else {
+        Write-Host "    • OUI database:  Not loaded`n" -ForegroundColor White
+    }
     
     if ($results.Count -eq 0) {
         Write-Host "❌ No active hosts found on this network" -ForegroundColor Red
@@ -667,7 +598,7 @@ function Scan-Network {
     Write-Host "    • & `$Global:CopyMACs   - Copy all MAC addresses to clipboard`n" -ForegroundColor White
     
     # Open in GridView for easy filtering/export
-    Write-Host "🔍 Opening results in GridView (use Ctrl+C to copy selected rows)..." -ForegroundColor DarkCyan
+    Write-Host "🔎 Opening results in GridView (use Ctrl+C to copy selected rows)..." -ForegroundColor DarkCyan
     
     $results | Out-GridView -Title "Network Scan Results - $($selectedInterface.CIDR) | Found: $($results.Count) hosts | Scan time: $([math]::Round($scanDuration, 1))s"
 }
