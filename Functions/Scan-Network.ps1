@@ -15,6 +15,16 @@ function Scan-Network {
     
     .PARAMETER Ports
         Array of ports to scan. Default: 22,80,443,3389,445,139
+        Note: Ignored if -Preset is specified
+    
+    .PARAMETER Preset
+        Use a predefined port list optimized for specific scenarios:
+        - Quick: Fast scan of common services (10 ports)
+        - Standard: Typical MSP scan including SQL (15 ports)
+        - Dental: Dental practice focused with practice management software (20 ports)
+        - Deep: Comprehensive scan including imaging and specialty services (25+ ports)
+        - Web: Web services and APIs only
+        - Database: All common database ports
     
     .PARAMETER ThrottleLimit
         Number of concurrent threads. Default: 30 (increased from 20)
@@ -37,6 +47,14 @@ function Scan-Network {
         Fast scan without port checking
     
     .EXAMPLE
+        Scan-Network -Preset Dental
+        Uses dental practice optimized port list
+    
+    .EXAMPLE
+        Scan-Network -Preset Deep -ThrottleLimit 100
+        Comprehensive scan with 100 concurrent threads
+    
+    .EXAMPLE
         Scan-Network -Ports @(80,443,8080) -ThrottleLimit 50
         Scans specific ports with 50 concurrent threads
     
@@ -47,7 +65,11 @@ function Scan-Network {
     
     [CmdletBinding()]
     param(
-        [int[]]$Ports = @(22, 80, 443, 3389, 445, 139),
+        [int[]]$Ports,
+        
+        [ValidateSet('Quick', 'Standard', 'Dental', 'Deep', 'Web', 'Database')]
+        [string]$Preset,
+        
         [int]$ThrottleLimit = 30,
         [switch]$QuickScan,
         [switch]$NoCacheClear,
@@ -380,6 +402,77 @@ function Scan-Network {
     
     Write-Host "`n🔍 Network Scanner" -ForegroundColor DarkCyan
     Write-Host ("═" * 70) -ForegroundColor DarkCyan
+    
+    # Apply port presets if specified (overrides -Ports parameter)
+    if ($Preset) {
+        switch ($Preset) {
+            'Quick' {
+                $Ports = @(22, 80, 443, 445, 1433, 3306, 3389, 8080)
+                Write-Host "`n📋 Using 'Quick' preset (8 ports)" -ForegroundColor Cyan
+            }
+            'Standard' {
+                $Ports = @(22, 80, 443, 445, 139, 1433, 1434, 3306, 3389, 5900, 8080, 9100, 50000)
+                Write-Host "`n📋 Using 'Standard' preset (13 ports)" -ForegroundColor Cyan
+            }
+            'Dental' {
+                $Ports = @(
+                    # Remote Access & Management
+                    22, 3389, 5900,
+                    # Web Services
+                    80, 443, 8080, 8443,
+                    # File Sharing
+                    445, 139,
+                    # SQL Databases (Critical for dental software)
+                    1433, 1434, 3306, 5432,
+                    # Dental Practice Management Software
+                    50000, 50001, 32767, 4000, 52734,
+                    # Imaging/X-Ray Systems
+                    104, 11112,
+                    # Print Services
+                    9100, 631
+                )
+                Write-Host "`n📋 Using 'Dental' preset (22 ports - optimized for dental practices)" -ForegroundColor Cyan
+            }
+            'Deep' {
+                $Ports = @(
+                    # Remote Access
+                    22, 23, 3389, 5900, 5901,
+                    # Web Services
+                    80, 443, 8080, 8443, 8000, 8888,
+                    # File Sharing
+                    445, 139, 2049, 21, 20,
+                    # Databases
+                    1433, 1434, 3306, 5432, 27017, 6379, 1521,
+                    # Dental Software
+                    50000, 50001, 32767, 4000, 52734,
+                    # Email
+                    25, 587, 465, 110, 995, 143, 993,
+                    # Imaging
+                    104, 11112,
+                    # Storage
+                    3260, 2049,
+                    # Print
+                    9100, 631,
+                    # Other
+                    53, 88, 389, 636, 3128
+                )
+                Write-Host "`n📋 Using 'Deep' preset (45 ports - comprehensive scan)" -ForegroundColor Cyan
+            }
+            'Web' {
+                $Ports = @(80, 443, 8080, 8443, 8000, 8888, 3000, 5000, 9000)
+                Write-Host "`n📋 Using 'Web' preset (9 ports)" -ForegroundColor Cyan
+            }
+            'Database' {
+                $Ports = @(1433, 1434, 3306, 5432, 27017, 6379, 1521, 5984, 9042, 7000, 7001)
+                Write-Host "`n📋 Using 'Database' preset (11 ports)" -ForegroundColor Cyan
+            }
+        }
+    } elseif (-not $Ports) {
+        # Use default ports if none specified
+        $Ports = @(22, 80, 443, 3389, 445, 139)
+    }
+    
+    Write-Host "    Ports: $($Ports -join ', ')" -ForegroundColor DarkGray
     
     # Determine OUI file path
     if (-not $OUIFilePath) {
