@@ -9,7 +9,10 @@ function Get-BitLockerInformation {
     #>
 
     # Check for Administrator privileges
-    if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsRole]::Administrator)) {
+    $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+    $isAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    
+    if (-NOT $isAdmin) {
         Write-Host "`nERROR: This function requires Administrator privileges!" -ForegroundColor Red
         Write-Host "Please run PowerShell as Administrator and try again.`n" -ForegroundColor Yellow
         return
