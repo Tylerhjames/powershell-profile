@@ -136,6 +136,18 @@ function Show-TechMenu {
             }
             Icon        = "💻"
         }
+        @{ 
+            Name        = "BitLocker Manager"
+            Description = "Manage drive encryption"
+            Command     = { 
+                if (Get-Command Get-BitLockerInformation -ErrorAction SilentlyContinue) {
+                    Get-BitLockerInformation
+                } else {
+                    Write-Host "❌ Get-BitLockerInformation function not found. Try: rpl" -ForegroundColor Red
+                }
+            }
+            Icon        = "🔒"
+        }
     )
     
     # ══════════════════════════════════════════════════════════════════════════
@@ -181,13 +193,13 @@ function Show-TechMenu {
         $padding = [math]::Floor(($boxWidth - $titleText.Length) / 2)
         $paddedTitle = (" " * $padding) + $titleText + (" " * ($boxWidth - $titleText.Length - $padding))
         
-        Write-Host "`n╔" -NoNewline -ForegroundColor DarkCyan
-        Write-Host ("═" * $boxWidth) -NoNewline -ForegroundColor DarkCyan
-        Write-Host "╗" -ForegroundColor DarkCyan
-        Write-Host "║$paddedTitle║" -ForegroundColor DarkCyan
-        Write-Host "╚" -NoNewline -ForegroundColor DarkCyan
-        Write-Host ("═" * $boxWidth) -NoNewline -ForegroundColor DarkCyan
-        Write-Host "╝`n" -ForegroundColor DarkCyan
+        Write-Host "`n╔" -NoNewline -ForegroundColor DarkGreen
+        Write-Host ("═" * $boxWidth) -NoNewline -ForegroundColor DarkGreen
+        Write-Host "╗" -ForegroundColor DarkGreen
+        Write-Host "║$paddedTitle║" -ForegroundColor DarkGreen
+        Write-Host "╚" -NoNewline -ForegroundColor DarkGreen
+        Write-Host ("═" * $boxWidth) -NoNewline -ForegroundColor DarkGreen
+        Write-Host "╝`n" -ForegroundColor DarkGreen
         
         Write-Host "  Use " -NoNewline -ForegroundColor Gray
         Write-Host "↑↓←→" -NoNewline -ForegroundColor Yellow
@@ -219,7 +231,7 @@ function Show-TechMenu {
                     }
                     else {
                         Write-Host "   " -NoNewline
-                        Write-Host $displayText.PadRight($columnWidth - 3) -NoNewline -ForegroundColor DarkCyan
+                        Write-Host $displayText.PadRight($columnWidth - 3) -NoNewline -ForegroundColor DarkGreen
                     }
                 }
                 else {
@@ -298,9 +310,9 @@ function Show-TechMenu {
                 Clear-Host
                 $selectedItem = $menuItems[$selectedIndex]
                 Write-Host "`n" -NoNewline
-                Write-Host ("═" * 63) -ForegroundColor DarkCyan
-                Write-Host "  Executing: $($selectedItem.Icon) $($selectedItem.Name)" -ForegroundColor DarkCyan
-                Write-Host ("═" * 63) -NoNewline -ForegroundColor DarkCyan
+                Write-Host ("═" * 63) -ForegroundColor DarkGreen
+                Write-Host "  Executing: $($selectedItem.Icon) $($selectedItem.Name)" -ForegroundColor DarkGreen
+                Write-Host ("═" * 63) -NoNewline -ForegroundColor DarkGreen
                 Write-Host "`n"
                 
                 try {
@@ -311,8 +323,8 @@ function Show-TechMenu {
                 
                 Write-Host "`n" -NoNewline
                 Write-Host ("─" * 63) -ForegroundColor DarkGray
-                Write-Host "Press any key to return to menu..." -ForegroundColor Gray
-                $null = [Console]::ReadKey($true)
+                Write-Host "Press Enter to return to menu..." -ForegroundColor Gray
+                Read-Host
             }
             
             'Q' {
@@ -329,9 +341,9 @@ function Show-TechMenu {
                         Clear-Host
                         $selectedItem = $menuItems[$selectedIndex]
                         Write-Host "`n" -NoNewline
-                        Write-Host ("═" * 63) -ForegroundColor DarkCyan
-                        Write-Host "  Executing: $($selectedItem.Icon) $($selectedItem.Name)" -ForegroundColor DarkCyan
-                        Write-Host ("═" * 63) -NoNewline -ForegroundColor DarkCyan
+                        Write-Host ("═" * 63) -ForegroundColor DarkGreen
+                        Write-Host "  Executing: $($selectedItem.Icon) $($selectedItem.Name)" -ForegroundColor DarkGreen
+                        Write-Host ("═" * 63) -NoNewline -ForegroundColor DarkGreen
                         Write-Host "`n"
                         
                         try {
@@ -342,8 +354,8 @@ function Show-TechMenu {
                         
                         Write-Host "`n" -NoNewline
                         Write-Host ("─" * 63) -ForegroundColor DarkGray
-                        Write-Host "Press any key to return to menu..." -ForegroundColor Gray
-                        $null = [Console]::ReadKey($true)
+                        Write-Host "Press Enter to return to menu..." -ForegroundColor Gray
+                        Read-Host
                     }
                 }
             }
