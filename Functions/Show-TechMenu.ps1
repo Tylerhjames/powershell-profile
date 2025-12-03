@@ -189,23 +189,15 @@ function Show-TechMenu {
         Clear-Host
         
         $boxWidth = 63
-        $titleText = "TECHNICIAN TOOLKIT"
-        $icon = "🛠️"
+        $titleText = "🛠️  TECHNICIAN TOOLKIT  🛠️"
+        $padding = [math]::Floor(($boxWidth - $titleText.Length) / 2)
+        $paddedTitle = (" " * $padding) + $titleText
         
-        # Calculate padding for centered text (accounting for icons taking extra visual space)
-        $textLength = $titleText.Length + 4  # +4 for spaces around text
-        $padding = [math]::Floor(($boxWidth - $textLength) / 2)
-        $remainingSpace = $boxWidth - $textLength - $padding
-        
-        $paddedTitle = (" " * $padding) + "$icon  $titleText  $icon" + (" " * $remainingSpace)
-        
-        Write-Host "`n╔" -NoNewline -ForegroundColor DarkGreen
-        Write-Host ("═" * $boxWidth) -NoNewline -ForegroundColor DarkGreen
-        Write-Host "╗" -ForegroundColor DarkGreen
-        Write-Host "║$paddedTitle║" -ForegroundColor DarkGreen
-        Write-Host "╚" -NoNewline -ForegroundColor DarkGreen
-        Write-Host ("═" * $boxWidth) -NoNewline -ForegroundColor DarkGreen
-        Write-Host "╝`n" -ForegroundColor DarkGreen
+        Write-Host ""
+        Write-Host ("═" * $boxWidth) -ForegroundColor DarkGreen
+        Write-Host $paddedTitle -ForegroundColor DarkGreen
+        Write-Host ("═" * $boxWidth) -ForegroundColor DarkGreen
+        Write-Host ""
         
         Write-Host "  Use " -NoNewline -ForegroundColor Gray
         Write-Host "↑↓←→" -NoNewline -ForegroundColor Yellow
