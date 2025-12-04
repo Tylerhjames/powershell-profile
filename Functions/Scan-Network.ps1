@@ -12,6 +12,7 @@ function Scan-Network {
         - ARP cache clearing for accurate MAC discovery
         - IEEE OUI database for vendor lookup (no API calls needed)
         - Quick scan mode (skip port scanning)
+        - Handles VPN point-to-point connections (/32 subnets)
     
     .PARAMETER Ports
         Array of ports to scan. Default: 22,80,443,3389,445,139
@@ -196,9 +197,37 @@ function Scan-Network {
             [int]$PrefixLength
         )
         
-        # Validate prefix length
+        # Check for /32 (VPN point-to-point connection)
+        if ($PrefixLength -eq 32) {
+            Write-Host "`n⚠️  VPN Point-to-Point Connection Detected" -ForegroundColor Yellow
+            Write-Host ("═" * 70) -ForegroundColor Yellow
+            Write-Host "`nThis interface has a /32 subnet mask, which means:" -ForegroundColor White
+            Write-Host "  • It's a single host address (no network range)" -ForegroundColor DarkGray
+            Write-Host "  • Typically used for VPN client endpoints" -ForegroundColor DarkGray
+            Write-Host "  • There are no other local hosts to scan" -ForegroundColor DarkGray
+            
+            Write-Host "`n💡 Options:" -ForegroundColor Cyan
+            Write-Host "  1. Scan a different network interface (if available)" -ForegroundColor White
+            Write-Host "  2. If you want to scan the remote VPN network:" -ForegroundColor White
+            Write-Host "     • You'll need the actual remote subnet (e.g., 10.0.0.0/24)" -ForegroundColor DarkGray
+            Write-Host "     • Contact your network admin for the remote network range" -ForegroundColor DarkGray
+            Write-Host "  3. Single host scan:" -ForegroundColor White
+            Write-Host "     • Press 'S' to scan just this host ($IP)" -ForegroundColor DarkGray
+            
+            Write-Host "`nPress Enter to return to interface selection..." -ForegroundColor Gray
+            $choice = Read-Host
+            
+            if ($choice -eq 'S' -or $choice -eq 's') {
+                # Return single IP for scanning
+                return @($IP)
+            } else {
+                throw "VPN_INTERFACE_SKIP"
+            }
+        }
+        
+        # Validate prefix length for network scanning
         if ($PrefixLength -lt 1 -or $PrefixLength -gt 30) {
-            throw "Invalid prefix length: $PrefixLength (must be 1-30)"
+            throw "Invalid prefix length: $PrefixLength (must be 1-30 for network scanning)"
         }
         
         # Parse IP to bytes
@@ -503,67 +532,81 @@ function Scan-Network {
         $ouiDatabase = Load-OUIDatabase -FilePath $OUIFilePath
     }
     
-    # Step 1: Detect interfaces
-    Write-Host "`n[1/4] Detecting active network interfaces..." -ForegroundColor Yellow
-    
-    try {
-        $interfaces = Get-ActiveInterfaces
-    } catch {
-        Write-Host "❌ Error detecting interfaces: $_" -ForegroundColor Red
-        return
-    }
-    
-    if ($interfaces.Count -eq 0) {
-        Write-Host "❌ No active interfaces found!" -ForegroundColor Red
-        Write-Host "    Ensure you have an active network connection." -ForegroundColor DarkGray
-        return
-    }
-    
-    Write-Host "`nActive Interfaces:" -ForegroundColor Green
-    $interfaces | ForEach-Object { 
-        Write-Host "  ✓ $($_.Name) - $($_.CIDR) ($($_.Description))" -ForegroundColor White
-    }
-    
-    # Interface selection
-    $selectedInterface = $interfaces[0]
-    if ($interfaces.Count -gt 1) {
-        Write-Host "`n⚠ Multiple interfaces detected. Select one to scan:" -ForegroundColor Yellow
+    # Step 1: Detect interfaces (with retry loop for VPN handling)
+    :InterfaceSelection while ($true) {
+        Write-Host "`n[1/4] Detecting active network interfaces..." -ForegroundColor Yellow
         
-        for ($i = 0; $i -lt $interfaces.Count; $i++) {
-            Write-Host "  [$($i+1)] $($interfaces[$i].Name) - $($interfaces[$i].CIDR)"
+        try {
+            $interfaces = Get-ActiveInterfaces
+        } catch {
+            Write-Host "❌ Error detecting interfaces: $_" -ForegroundColor Red
+            return
         }
         
-        $selection = Read-Host "Enter number (default: 1)"
+        if ($interfaces.Count -eq 0) {
+            Write-Host "❌ No active interfaces found!" -ForegroundColor Red
+            Write-Host "    Ensure you have an active network connection." -ForegroundColor DarkGray
+            return
+        }
         
-        if ($selection -match '^\d+$') {
-            $idx = [int]$selection - 1
-            if ($idx -ge 0 -and $idx -lt $interfaces.Count) {
-                $selectedInterface = $interfaces[$idx]
+        Write-Host "`nActive Interfaces:" -ForegroundColor Green
+        $interfaces | ForEach-Object { 
+            $vpnIndicator = if ($_.PrefixLength -eq 32) { " [VPN Point-to-Point]" } else { "" }
+            Write-Host "  ✓ $($_.Name) - $($_.CIDR)$vpnIndicator ($($_.Description))" -ForegroundColor White
+        }
+        
+        # Interface selection
+        $selectedInterface = $interfaces[0]
+        if ($interfaces.Count -gt 1) {
+            Write-Host "`n⚠️  Multiple interfaces detected. Select one to scan:" -ForegroundColor Yellow
+            
+            for ($i = 0; $i -lt $interfaces.Count; $i++) {
+                $vpnNote = if ($interfaces[$i].PrefixLength -eq 32) { " (VPN - /32)" } else { "" }
+                Write-Host "  [$($i+1)] $($interfaces[$i].Name) - $($interfaces[$i].CIDR)$vpnNote"
+            }
+            
+            $selection = Read-Host "Enter number (default: 1)"
+            
+            if ($selection -match '^\d+$') {
+                $idx = [int]$selection - 1
+                if ($idx -ge 0 -and $idx -lt $interfaces.Count) {
+                    $selectedInterface = $interfaces[$idx]
+                }
+            }
+        }
+        
+        Write-Host "`n✓ Selected: $($selectedInterface.Name) - $($selectedInterface.CIDR)" -ForegroundColor Green
+        
+        # Step 2: Clear ARP cache
+        Write-Host "`n[2/4] Preparing ARP cache..." -ForegroundColor Yellow
+        
+        if (-not $NoCacheClear) {
+            Clear-ARPCache | Out-Null
+        } else {
+            Write-Host "    ⏭️  Skipping ARP cache clear (using -NoCacheClear)" -ForegroundColor DarkGray
+        }
+        
+        # Step 3: Calculate IP range (this will handle /32 detection)
+        Write-Host "`n[3/4] Calculating host range..." -ForegroundColor Yellow
+        
+        try {
+            $ips = Get-NetworkRange -IP $selectedInterface.IPAddress -PrefixLength $selectedInterface.PrefixLength
+            
+            # If we get here successfully, break out of the interface selection loop
+            break InterfaceSelection
+            
+        } catch {
+            if ($_.Exception.Message -eq "VPN_INTERFACE_SKIP") {
+                # User chose to return to interface selection
+                continue InterfaceSelection
+            } else {
+                Write-Host "❌ Error calculating range: $_" -ForegroundColor Red
+                return
             }
         }
     }
     
-    Write-Host "`n✓ Selected: $($selectedInterface.Name) - $($selectedInterface.CIDR)" -ForegroundColor Green
-    
-    # Step 2: Clear ARP cache
-    Write-Host "`n[2/4] Preparing ARP cache..." -ForegroundColor Yellow
-    
-    if (-not $NoCacheClear) {
-        Clear-ARPCache | Out-Null
-    } else {
-        Write-Host "    ⏭️  Skipping ARP cache clear (using -NoCacheClear)" -ForegroundColor DarkGray
-    }
-    
-    # Step 3: Calculate IP range
-    Write-Host "`n[3/4] Calculating host range..." -ForegroundColor Yellow
-    
-    try {
-        $ips = Get-NetworkRange -IP $selectedInterface.IPAddress -PrefixLength $selectedInterface.PrefixLength
-    } catch {
-        Write-Host "❌ Error calculating range: $_" -ForegroundColor Red
-        return
-    }
-    
+    # Continue with scan...
     Write-Host "    Total hosts to scan: $($ips.Count)" -ForegroundColor DarkGray
     
     if ($QuickScan) {
