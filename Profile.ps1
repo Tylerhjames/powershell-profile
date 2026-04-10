@@ -259,9 +259,17 @@ Set-Alias -Name save -Value Save-Profile -Scope Global
 function Edit-Profile {
     <#
     .SYNOPSIS
-    Opens profile in default editor
+    Opens profile in default editor (VS Code → Notepad++ → notepad)
     #>
-    code "$script:ProfileRepo\Profile.ps1"
+    $target = "$script:ProfileRepo\Profile.ps1"
+
+    if (Get-Command code -ErrorAction SilentlyContinue) {
+        code $target
+    } elseif (Get-Command npp -ErrorAction SilentlyContinue) {
+        npp $target
+    } else {
+        notepad $target
+    }
 }
 Set-Alias -Name ep -Value Edit-Profile -Scope Global
 
