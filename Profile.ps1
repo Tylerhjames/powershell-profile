@@ -104,8 +104,9 @@ if (Get-Module PSReadLine) {
 
 $functionsPath = "$script:ProfileRepo\Functions"
 if (Test-Path $functionsPath) {
-    Get-ChildItem $functionsPath -Filter *.ps1 -ErrorAction SilentlyContinue |
-        ForEach-Object { . $_.FullName }
+    foreach ($f in Get-ChildItem $functionsPath -Filter *.ps1 -ErrorAction SilentlyContinue) {
+        . $f.FullName
+    }
 }
 
 # ══════════════════════════════════════════════════════════════════════════════

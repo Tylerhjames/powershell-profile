@@ -600,14 +600,16 @@ function Invoke-ServerInventory {
     <div class="value">$($vms.Count)</div>
     <div class="detail">$(($vms | Where-Object State -eq 'Running').Count) running</div>
   </div>
-"@ })
+"@
+  })
   $(if ($iscsiActive -and $iscsiSessions.Count -gt 0) { @"
   <div class="summary-card">
     <div class="label">iSCSI</div>
     <div class="value">$($iscsiSessions.Count) sessions</div>
     <div class="detail">$(($iscsiSessions | Where-Object IsConnected -eq `$true).Count) connected</div>
   </div>
-"@ })
+"@
+  })
 </div>
 
 <section id="baseboard">
