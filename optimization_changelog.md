@@ -54,3 +54,36 @@
 | **Total estimated savings** | | **~646ms** | **Pending re-benchmark** |
 
 **Expected post-optimization startup:** ~250–350ms (down from 956ms avg)
+**Measured post-optimization startup:** 342ms avg (75–863ms range), 1046ms total system time
+
+---
+
+## 2026-04-10 — Function Bug Fixes & Portability Pass
+
+### Bug Fixes
+
+**`Get-SystemDetails.ps1` line 166 — Wrong variable in RAM recommendation**
+Used `${speed}` (leftover from foreach loop) instead of `$recommendSpeed` (set from `$firstModule.Speed`). Would display the last iterated module's speed instead of the matching module's speed.
+
+**`test-site.ps1` — Double URL prefix when user passes full URL**
+`Test-Site https://example.com` would create `https://https://example.com`. Added input normalization to strip protocol prefix before use. Also improved error messages to show actual exception details.
+
+**`renew-safe.ps1` — Case-sensitive YES comparison**
+Required exact `YES` (all caps); `yes` or `Yes` was rejected. Changed to case-insensitive match. Also improved RDP detection logic — old check using `$env:CLIENTNAME` could misfire on non-RDP sessions where that var is empty. Now also shows the renewed IP config after completion.
+
+### Portability Fixes
+
+**`npp.ps1` — Hardcoded Notepad++ path**
+Replaced single hardcoded path with search across Program Files, Program Files (x86), and LocalAppData. Removed mandatory `$file` parameter so `npp` opens Notepad++ standalone. Shows install command if not found.
+
+**`bootstrap.ps1` — Added Notepad++ auto-install**
+Bootstrap now installs Notepad++ via winget as part of workstation setup. Non-blocking, best-effort — warns if winget unavailable.
+
+**`Update-ProfileRepo.ps1` — Hardcoded repo path**
+Replaced hardcoded `$HOME\Documents\Git\powershell-profile` with cascading detection: checks `$script:ProfileRepo` (from Profile.ps1), then derives from `$PSScriptRoot`, then falls back to the hardcoded path. Also switched from `Set-Location`/`Set-Location $HOME` to `Push-Location`/`Pop-Location` for safety.
+
+**`Invoke-InternetSpeedTest.ps1` — Hardcoded bin path**
+Replaced hardcoded bin path with `$PSScriptRoot`-derived path that works regardless of where the repo is cloned.
+
+**`Profile.ps1` — All Set-Alias calls use -Scope Global**
+Fixed scoping issue where aliases created during `Reload-Profile` were lost because they were set in the function's scope instead of global. Also renamed `sp` alias (conflicted with built-in `Set-ItemProperty`) to `save`.

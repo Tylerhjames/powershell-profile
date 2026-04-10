@@ -163,7 +163,7 @@ function Get-SystemDetails {
                 $recommendSize = [math]::Round($firstModule.Capacity / 1GB, 0)
                 $recommendSpeed = $firstModule.Speed
                 Write-Host "RAM usage high! Add " -NoNewline -ForegroundColor Yellow
-                Write-Host "$recommendSize GB ${speed}MHz $memType" -NoNewline -ForegroundColor White
+                Write-Host "$recommendSize GB ${recommendSpeed}MHz $memType" -NoNewline -ForegroundColor White
                 Write-Host " module" -ForegroundColor Yellow
             } else {
                 Write-Host "RAM usage high! All slots full - consider replacing with higher capacity modules" -ForegroundColor Yellow

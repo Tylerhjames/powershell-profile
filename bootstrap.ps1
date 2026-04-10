@@ -510,6 +510,31 @@ try {
     if (-not (Install-ProfileLoader)) {
         throw "Profile loader installation failed"
     }
+
+    # Install Notepad++ via winget (non-blocking, best-effort)
+    $nppPaths = @(
+        "$env:ProgramFiles\Notepad++\notepad++.exe",
+        "${env:ProgramFiles(x86)}\Notepad++\notepad++.exe",
+        "$env:LocalAppData\Notepad++\notepad++.exe"
+    )
+    $nppInstalled = $nppPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+    if (-not $nppInstalled) {
+        $winget = Get-Command winget -ErrorAction SilentlyContinue
+        if ($winget) {
+            Write-Info "Installing Notepad++..."
+            winget install Notepad++.Notepad++ --accept-package-agreements --accept-source-agreements --silent 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Ok "Notepad++ installed"
+            } else {
+                Write-Warn "Notepad++ install failed — install manually: winget install Notepad++.Notepad++"
+            }
+        } else {
+            Write-Warn "winget not found — install Notepad++ manually"
+        }
+    } else {
+        Write-Ok "Notepad++ already installed"
+    }
     
     # Success summary
     Write-Host ""

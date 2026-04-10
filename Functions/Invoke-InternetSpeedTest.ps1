@@ -34,7 +34,9 @@ function Invoke-InternetSpeedTest {
     # Configuration
     # ══════════════════════════════════════════════════════════════════════════
     
-    $binRoot = Join-Path $HOME 'Documents\Git\powershell-profile\bin'
+    # Derive bin path from script location for portability across workstations
+    $binRoot = if ($PSScriptRoot) { Join-Path (Split-Path $PSScriptRoot -Parent) 'bin' }
+               else { Join-Path $HOME 'Documents\Git\powershell-profile\bin' }
     $speedtestExe = Join-Path $binRoot 'speedtest.exe'
     $downloadUrl = 'https://install.speedtest.net/app/cli/ookla-speedtest-1.2.0-win64.zip'
     
