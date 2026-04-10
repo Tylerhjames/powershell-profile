@@ -1,5 +1,23 @@
 # PowerShell Profile Optimization Changelog
 
+## 2026-04-10 — Tech Menu: Letter Keys + Flicker Fix
+
+**File:** `Functions/Show-TechMenu.ps1` (modified)
+
+**Problem 1:** With 11 items, pressing `1` for item 11 immediately fired item 1 (single-char `ReadKey` can't distinguish `1` from `11`).
+**Fix:** Switched from number keys to letter keys (A-K). Each item displays `[A]`, `[B]`, etc. Pressing a letter immediately executes that item.
+
+**Problem 2:** Arrow key navigation caused visible screen flash/flicker.
+**Fix:** Replaced `Clear-Host` (full buffer clear) with `[Console]::SetCursorPosition(0,0)` (in-place overwrite) on subsequent redraws. First draw and post-execution returns still use `Clear-Host` for a clean slate.
+
+**Other changes:**
+- Added `Escape` key as alternate quit (alongside `Q`)
+- Extracted `Invoke-MenuItem` helper to eliminate duplicated execution code
+- Description rows are padded consistently to prevent leftover text artifacts during redraws
+- Replaced emoji characters (═, ►, ✓) with ASCII equivalents (=, >, text) for broader terminal compatibility
+
+---
+
 ## 2026-04-10 — Phase 5: Daily PS Version Check (background, non-blocking)
 
 **File:** `Functions/Test-PSVersion.ps1` (new, ~65 lines)

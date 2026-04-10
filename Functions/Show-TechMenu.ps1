@@ -203,52 +203,62 @@ function Show-TechMenu {
         return $optimalCols
     }
     
+    # Letter keys mapped to menu indices (A=0, B=1, ... K=10, etc.)
+    $script:LetterKeys = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
     function Show-Menu {
         param(
             [array]$Items,
             [int]$SelectedIndex,
-            [int]$ColumnCount
+            [int]$ColumnCount,
+            [switch]$FirstDraw
         )
-        
-        Clear-Host
-        
+
+        # First draw clears the screen; subsequent redraws reposition the cursor
+        if ($FirstDraw) {
+            Clear-Host
+        } else {
+            [Console]::SetCursorPosition(0, 0)
+        }
+
         $boxWidth = 63
-        $titleText = "🛠️  TECHNICIAN TOOLKIT  🛠️"
+        $titleText = "  TECHNICIAN TOOLKIT  "
         $padding = [math]::Floor(($boxWidth - $titleText.Length) / 2)
         $paddedTitle = (" " * $padding) + $titleText
-        
+
         Write-Host ""
-        Write-Host ("═" * $boxWidth) -ForegroundColor DarkGreen
+        Write-Host ("=" * $boxWidth) -ForegroundColor DarkGreen
         Write-Host $paddedTitle -ForegroundColor DarkGreen
-        Write-Host ("═" * $boxWidth) -ForegroundColor DarkGreen
+        Write-Host ("=" * $boxWidth) -ForegroundColor DarkGreen
         Write-Host ""
-        
+
         Write-Host "  Use " -NoNewline -ForegroundColor Gray
-        Write-Host "↑↓←→" -NoNewline -ForegroundColor Yellow
+        Write-Host "arrows" -NoNewline -ForegroundColor Yellow
         Write-Host " or " -NoNewline -ForegroundColor Gray
-        Write-Host "number keys" -NoNewline -ForegroundColor Yellow
+        Write-Host "letter keys" -NoNewline -ForegroundColor Yellow
         Write-Host " to navigate, " -NoNewline -ForegroundColor Gray
         Write-Host "Enter" -NoNewline -ForegroundColor Yellow
         Write-Host " to select, " -NoNewline -ForegroundColor Gray
         Write-Host "Q" -NoNewline -ForegroundColor Yellow
-        Write-Host " to quit`n" -ForegroundColor Gray
-        
+        Write-Host " to quit" -ForegroundColor Gray
+        Write-Host ""
+
         $rows = [math]::Ceiling($Items.Count / $ColumnCount)
         $columnWidth = 35
-        
+
         for ($row = 0; $row -lt $rows; $row++) {
             for ($col = 0; $col -lt $ColumnCount; $col++) {
                 $index = $row + ($col * $rows)
-                
+
                 if ($index -lt $Items.Count) {
                     $item = $Items[$index]
                     $isSelected = ($index -eq $SelectedIndex)
-                    
-                    $displayNum = $index + 1
-                    $displayText = "  $($item.Icon) [$displayNum] $($item.Name)"
-                    
+
+                    $letter = $script:LetterKeys[$index]
+                    $displayText = "  $($item.Icon) [$letter] $($item.Name)"
+
                     if ($isSelected) {
-                        Write-Host " ► " -NoNewline -ForegroundColor Yellow
+                        Write-Host " > " -NoNewline -ForegroundColor Yellow
                         Write-Host $displayText.PadRight($columnWidth - 3) -NoNewline -BackgroundColor DarkGray -ForegroundColor White
                     }
                     else {
@@ -257,27 +267,33 @@ function Show-TechMenu {
                     }
                 }
                 else {
-                    Write-Host " ".PadRight($columnWidth) -NoNewline
+                    Write-Host (" " * $columnWidth) -NoNewline
                 }
             }
             Write-Host ""
-            
+
+            # Description line for selected item (pad non-selected rows to maintain layout)
+            $descWritten = $false
             for ($col = 0; $col -lt $ColumnCount; $col++) {
                 $index = $row + ($col * $rows)
-                
+
                 if ($index -eq $SelectedIndex -and $index -lt $Items.Count) {
-                    $descPadding = " ".PadLeft(6)
-                    Write-Host "$descPadding└─ $($Items[$index].Description)" -ForegroundColor DarkGray
+                    $descText = "      -- $($Items[$index].Description)"
+                    Write-Host $descText.PadRight($boxWidth) -ForegroundColor DarkGray
+                    $descWritten = $true
                 }
             }
-            
+            if (-not $descWritten) {
+                Write-Host (" " * $boxWidth)
+            }
+
             Write-Host ""
         }
-        
-        Write-Host "`n" -NoNewline
+
+        Write-Host ""
         Write-Host ("─" * $boxWidth) -ForegroundColor DarkGray
-        Write-Host "  Selected: " -NoNewline -ForegroundColor Gray
-        Write-Host "$($Items[$SelectedIndex].Icon) $($Items[$SelectedIndex].Name)" -ForegroundColor Yellow
+        $letter = $script:LetterKeys[$SelectedIndex]
+        Write-Host "  Selected: $($Items[$SelectedIndex].Icon) [$letter] $($Items[$SelectedIndex].Name)".PadRight($boxWidth) -ForegroundColor Yellow
         Write-Host ("─" * $boxWidth) -ForegroundColor DarkGray
     }
     
@@ -293,23 +309,52 @@ function Show-TechMenu {
     $rows = [math]::Ceiling($menuItems.Count / $Columns)
     $selectedIndex = 0
     $running = $true
-    
+    $firstDraw = $true
+
+    # Helper to execute the selected menu item
+    function Invoke-MenuItem {
+        param([hashtable]$Item)
+
+        Clear-Host
+        Write-Host ""
+        Write-Host ("=" * 63) -ForegroundColor DarkGreen
+        Write-Host "  Executing: $($Item.Icon) $($Item.Name)" -ForegroundColor DarkGreen
+        Write-Host ("=" * 63) -ForegroundColor DarkGreen
+        Write-Host ""
+
+        try {
+            & $Item.Command
+        } catch {
+            Write-Host "`nError: $_" -ForegroundColor Red
+        }
+
+        Write-Host ""
+        Write-Host ("─" * 63) -ForegroundColor DarkGray
+        Write-Host "Press Enter to return to menu..." -ForegroundColor Gray
+        Read-Host
+    }
+
     while ($running) {
-        Show-Menu -Items $menuItems -SelectedIndex $selectedIndex -ColumnCount $Columns
-        
+        if ($firstDraw) {
+            Show-Menu -Items $menuItems -SelectedIndex $selectedIndex -ColumnCount $Columns -FirstDraw
+            $firstDraw = $false
+        } else {
+            Show-Menu -Items $menuItems -SelectedIndex $selectedIndex -ColumnCount $Columns
+        }
+
         $key = [Console]::ReadKey($true)
-        
+
         switch ($key.Key) {
             'UpArrow' {
                 $selectedIndex -= 1
                 if ($selectedIndex -lt 0) { $selectedIndex = $menuItems.Count - 1 }
             }
-            
+
             'DownArrow' {
                 $selectedIndex += 1
                 if ($selectedIndex -ge $menuItems.Count) { $selectedIndex = 0 }
             }
-            
+
             'LeftArrow' {
                 $currentRow = $selectedIndex % $rows
                 $currentCol = [math]::Floor($selectedIndex / $rows)
@@ -318,7 +363,7 @@ function Show-TechMenu {
                 if ($newIndex -ge $menuItems.Count) { $newIndex = $menuItems.Count - 1 }
                 $selectedIndex = $newIndex
             }
-            
+
             'RightArrow' {
                 $currentRow = $selectedIndex % $rows
                 $currentCol = [math]::Floor($selectedIndex / $rows)
@@ -327,58 +372,33 @@ function Show-TechMenu {
                 if ($newIndex -ge $menuItems.Count) { $newIndex = 0 }
                 $selectedIndex = $newIndex
             }
-            
+
             'Enter' {
-                Clear-Host
-                $selectedItem = $menuItems[$selectedIndex]
-                Write-Host "`n" -NoNewline
-                Write-Host ("═" * 63) -ForegroundColor DarkGreen
-                Write-Host "  Executing: $($selectedItem.Icon) $($selectedItem.Name)" -ForegroundColor DarkGreen
-                Write-Host ("═" * 63) -NoNewline -ForegroundColor DarkGreen
-                Write-Host "`n"
-                
-                try {
-                    & $selectedItem.Command
-                } catch {
-                    Write-Host "`n❌ Error: $_" -ForegroundColor Red
-                }
-                
-                Write-Host "`n" -NoNewline
-                Write-Host ("─" * 63) -ForegroundColor DarkGray
-                Write-Host "Press Enter to return to menu..." -ForegroundColor Gray
-                Read-Host
+                Invoke-MenuItem -Item $menuItems[$selectedIndex]
+                $firstDraw = $true
             }
-            
+
+            'Escape' {
+                $running = $false
+                Clear-Host
+                Write-Host "`nExiting Technician Toolkit`n" -ForegroundColor Green
+            }
+
             'Q' {
                 $running = $false
                 Clear-Host
-                Write-Host "`n✓ Exiting Technician Toolkit`n" -ForegroundColor Green
+                Write-Host "`nExiting Technician Toolkit`n" -ForegroundColor Green
             }
-            
+
             default {
-                if ($key.KeyChar -match '^\d$') {
-                    $num = [int]::Parse($key.KeyChar.ToString())
-                    if ($num -ge 1 -and $num -le $menuItems.Count) {
-                        $selectedIndex = $num - 1
-                        Clear-Host
-                        $selectedItem = $menuItems[$selectedIndex]
-                        Write-Host "`n" -NoNewline
-                        Write-Host ("═" * 63) -ForegroundColor DarkGreen
-                        Write-Host "  Executing: $($selectedItem.Icon) $($selectedItem.Name)" -ForegroundColor DarkGreen
-                        Write-Host ("═" * 63) -NoNewline -ForegroundColor DarkGreen
-                        Write-Host "`n"
-                        
-                        try {
-                            & $selectedItem.Command
-                        } catch {
-                            Write-Host "`n❌ Error: $_" -ForegroundColor Red
-                        }
-                        
-                        Write-Host "`n" -NoNewline
-                        Write-Host ("─" * 63) -ForegroundColor DarkGray
-                        Write-Host "Press Enter to return to menu..." -ForegroundColor Gray
-                        Read-Host
-                    }
+                # Letter key direct selection — A executes item 0, B executes item 1, etc.
+                $letterChar = [char]::ToUpper($key.KeyChar)
+                $letterIndex = $script:LetterKeys.IndexOf($letterChar)
+
+                if ($letterIndex -ge 0 -and $letterIndex -lt $menuItems.Count) {
+                    $selectedIndex = $letterIndex
+                    Invoke-MenuItem -Item $menuItems[$selectedIndex]
+                    $firstDraw = $true
                 }
             }
         }
