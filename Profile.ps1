@@ -80,23 +80,6 @@ if (Test-Path "$script:ProfileRepo\.git") {
 # Test-Path + one-line read, no git calls on the hot path.
 
 $script:_gitSyncNotified = $false
-if (Get-Module PSReadLine) {
-    $null = Register-EngineEvent -SourceIdentifier PowerShell.OnIdle -MaxTriggerCount 1 -Action {
-        $flagFile = Join-Path $env:TEMP 'ps-profile-git-sync-result.txt'
-        if (Test-Path $flagFile) {
-            $result = (Get-Content $flagFile -Raw).Trim()
-            Remove-Item $flagFile -Force -ErrorAction SilentlyContinue
-
-            switch ($result) {
-                'updated'        { Write-Host "`n✓ Profile updated from GitHub — run " -ForegroundColor DarkGreen -NoNewline
-                                   Write-Host "Reload-Profile" -ForegroundColor Cyan -NoNewline
-                                   Write-Host " to apply" -ForegroundColor DarkGreen }
-                'local-changes'  { Write-Host "`n⚠ Profile sync skipped — local changes detected" -ForegroundColor Yellow }
-                'pull-failed'    { Write-Host "`n✗ Profile auto-pull failed — check manually" -ForegroundColor Red }
-            }
-        }
-    }
-}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Auto-Load Functions
@@ -294,6 +277,103 @@ function Show-ProfileStatus {
 }
 # Phase 4: Renamed from 'ps' which shadows the built-in Get-Process alias
 Set-Alias -Name pstat -Value Show-ProfileStatus -Scope Global
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Phase 5: Background PS Version Check (daily, non-blocking)
+# ══════════════════════════════════════════════════════════════════════════════
+# Rationale: winget show can take 1-2s. Same pattern as git sync — fire in a
+# background runspace, write result to a flag file, notify via OnIdle event.
+# The daily throttle is in the flag file itself (date stamp), so the runspace
+# only launches once per day.
+
+$script:PSVersionFlag = Join-Path $env:TEMP 'ps-version-update-available.txt'
+$today = (Get-Date).ToString('yyyy-MM-dd')
+$script:_psVersionCheckDone = $false
+
+# Only launch the runspace if we haven't checked today
+$psVerThrottle = Join-Path $env:TEMP 'ps-version-check.txt'
+$shouldCheck = $true
+if (Test-Path $psVerThrottle) {
+    $lastCheck = (Get-Content $psVerThrottle -Raw -ErrorAction SilentlyContinue).Trim()
+    if ($lastCheck -eq $today) { $shouldCheck = $false }
+}
+
+if ($shouldCheck) {
+    $today | Set-Content $psVerThrottle -Force -ErrorAction SilentlyContinue
+
+    $verRunspace = [runspacefactory]::CreateRunspace()
+    $verRunspace.Open()
+
+    $verPS = [powershell]::Create().AddScript({
+        param($CurrentMajor, $CurrentMinor, $CurrentPatch, $FlagFile)
+
+        try {
+            $output = & winget show Microsoft.PowerShell --accept-source-agreements 2>$null
+            if (-not $output) { return }
+
+            $vLine = $output | Where-Object { $_ -match '^\s*Version:\s+(.+)' }
+            if (-not $vLine) { return }
+
+            $null = $vLine -match '^\s*Version:\s+(.+)'
+            $latestStr = $Matches[1].Trim()
+            $latest  = [version]$latestStr
+            $current = [version]"$CurrentMajor.$CurrentMinor.$CurrentPatch"
+
+            if ($latest -gt $current) {
+                "$latestStr|$current" | Set-Content $FlagFile -Force
+            } else {
+                if (Test-Path $FlagFile) { Remove-Item $FlagFile -Force }
+            }
+        }
+        catch {
+            if (Test-Path $FlagFile) { Remove-Item $FlagFile -Force }
+        }
+    }).AddArgument($PSVersionTable.PSVersion.Major).AddArgument($PSVersionTable.PSVersion.Minor).AddArgument($PSVersionTable.PSVersion.Patch).AddArgument($script:PSVersionFlag)
+
+    $verPS.Runspace = $verRunspace
+    $null = $verPS.BeginInvoke()
+
+    $script:_bgVerPS = $verPS
+    $script:_bgVerRS = $verRunspace
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Consolidated OnIdle Notification (git sync + version check)
+# ══════════════════════════════════════════════════════════════════════════════
+# Single handler for all background task results. Fires once after the first
+# idle tick, checks both flag files, and displays any relevant notifications.
+
+if (Get-Module PSReadLine) {
+    $null = Register-EngineEvent -SourceIdentifier PowerShell.OnIdle -MaxTriggerCount 1 -Action {
+        # ── Git sync result ──
+        $gitFlag = Join-Path $env:TEMP 'ps-profile-git-sync-result.txt'
+        if (Test-Path $gitFlag) {
+            $result = (Get-Content $gitFlag -Raw).Trim()
+            Remove-Item $gitFlag -Force -ErrorAction SilentlyContinue
+
+            switch ($result) {
+                'updated'       { Write-Host "`n✓ Profile updated from GitHub — run " -ForegroundColor DarkGreen -NoNewline
+                                  Write-Host "Reload-Profile" -ForegroundColor Cyan -NoNewline
+                                  Write-Host " to apply" -ForegroundColor DarkGreen }
+                'local-changes' { Write-Host "`n⚠ Profile sync skipped — local changes detected" -ForegroundColor Yellow }
+                'pull-failed'   { Write-Host "`n✗ Profile auto-pull failed — check manually" -ForegroundColor Red }
+            }
+        }
+
+        # ── PS version check result ──
+        $verFlag = Join-Path $env:TEMP 'ps-version-update-available.txt'
+        if (Test-Path $verFlag) {
+            $parts = ((Get-Content $verFlag -Raw).Trim()) -split '\|'
+            if ($parts.Count -eq 2) {
+                Write-Host "⬆ PowerShell $($parts[0]) available " -ForegroundColor DarkYellow -NoNewline
+                Write-Host "(current: $($parts[1]))" -ForegroundColor Gray -NoNewline
+                Write-Host " — run: " -ForegroundColor DarkYellow -NoNewline
+                Write-Host "winget upgrade Microsoft.PowerShell" -ForegroundColor Cyan
+            }
+            Remove-Item $verFlag -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Startup Message

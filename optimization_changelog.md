@@ -1,5 +1,24 @@
 # PowerShell Profile Optimization Changelog
 
+## 2026-04-10 — Phase 5: Daily PS Version Check (background, non-blocking)
+
+**File:** `Functions/Test-PSVersion.ps1` (new, ~65 lines)
+**File:** `Profile.ps1` (modified — added background runspace + consolidated OnIdle handler)
+
+**What it does:**
+- Once per day, launches a background runspace that runs `winget show Microsoft.PowerShell`
+- Compares the latest stable version against `$PSVersionTable.PSVersion`
+- If outdated, writes result to a flag file; the OnIdle event displays a one-line notification
+- Daily throttle via date-stamped flag file (`$env:TEMP\ps-version-check.txt`)
+- Manual check available anytime: `Test-PSVersion` or `psver` (use `-Force` to bypass throttle)
+
+**Architectural change:**
+- Consolidated the two separate `Register-EngineEvent PowerShell.OnIdle` handlers (git sync + version check) into a single handler to avoid conflicts with `-MaxTriggerCount 1`
+
+**Expected impact:** Zero startup cost — winget runs in a background runspace after the prompt is interactive.
+
+---
+
 ## 2026-04-10 — Added Start-Pulse & Updated Tech Menu
 
 **File:** `Functions/Start-Pulse.ps1` (new, ~284 lines)
