@@ -315,12 +315,14 @@ if ($shouldCheck) {
             if (-not $vLine) { return }
 
             $null = $vLine -match '^\s*Version:\s+(.+)'
-            $latestStr = $Matches[1].Trim()
-            $latest  = [version]$latestStr
+            $rawVer = [version]($Matches[1].Trim())
+            # Normalize both to 3-part (Major.Minor.Build) to avoid
+            # .NET Revision=-1 vs 0 false positive (7.6.0 vs 7.6.0.0)
+            $latest  = [version]"$($rawVer.Major).$($rawVer.Minor).$($rawVer.Build)"
             $current = [version]"$CurrentMajor.$CurrentMinor.$CurrentPatch"
 
             if ($latest -gt $current) {
-                "$latestStr|$current" | Set-Content $FlagFile -Force
+                "$latest|$current" | Set-Content $FlagFile -Force
             } else {
                 if (Test-Path $FlagFile) { Remove-Item $FlagFile -Force }
             }

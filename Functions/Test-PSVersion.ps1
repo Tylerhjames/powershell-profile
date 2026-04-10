@@ -41,14 +41,15 @@ function Test-PSVersion {
         if (-not $versionLine) { return }
 
         $null = $versionLine -match '^\s*Version:\s+(.+)'
-        $latestStr = $Matches[1].Trim()
+        $rawVer = [version]($Matches[1].Trim())
 
-        # Parse into System.Version for reliable comparison
-        $latestVersion  = [version]$latestStr
+        # Normalize both to 3-part (Major.Minor.Build) to avoid
+        # .NET Revision=-1 vs 0 false positive (7.6.0 vs 7.6.0.0)
+        $latestVersion  = [version]"$($rawVer.Major).$($rawVer.Minor).$($rawVer.Build)"
         $currentVersion = [version]"$($PSVersionTable.PSVersion.Major).$($PSVersionTable.PSVersion.Minor).$($PSVersionTable.PSVersion.Patch)"
 
         if ($latestVersion -gt $currentVersion) {
-            Write-Host "⬆ PowerShell $latestStr available " -ForegroundColor DarkYellow -NoNewline
+            Write-Host "⬆ PowerShell $latestVersion available " -ForegroundColor DarkYellow -NoNewline
             Write-Host "(current: $currentVersion)" -ForegroundColor Gray -NoNewline
             Write-Host " — run: " -ForegroundColor DarkYellow -NoNewline
             Write-Host "winget upgrade Microsoft.PowerShell" -ForegroundColor Cyan
