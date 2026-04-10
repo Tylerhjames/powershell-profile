@@ -1,5 +1,27 @@
 # PowerShell Profile Optimization Changelog
 
+## 2026-04-10 — Added Invoke-ServerInventory to Profile
+
+**File:** `Functions/Invoke-ServerInventory.ps1` (new, ~680 lines)
+**Source:** Wrapped `Server-Inventory_v3.ps1` standalone script into a proper function.
+
+**Changes from standalone version:**
+- Wrapped in `Invoke-ServerInventory` function — no code executes at dot-source time
+- Added `-OutputPath` parameter (defaults to `C:\CBIT\Audit`, overridable)
+- Added `[CmdletBinding()]` and full comment-based help (`.SYNOPSIS`, `.EXAMPLE`)
+- Added workstation OS warning — detects non-Server OS and warns but doesn't block
+- `Get-WindowsFeature` and other server-only cmdlets wrapped in try/catch for graceful skip
+- Added aliases: `inventory`, `serverinv` (both `-Scope Global`)
+- Roles & Features text output handles missing `Get-WindowsFeature` gracefully
+
+---
+
+## 2026-04-10 — Function Bug Fixes & Portability Pass
+
+(see below)
+
+---
+
 ## 2026-04-10 — Phase 1–4 Initial Optimization Pass
 
 **Baseline measurement:** 956ms avg startup (662–1506ms range) on P16SG3, PS 7.6.0
