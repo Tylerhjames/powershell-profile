@@ -1,0 +1,41 @@
+PowerShell Profile Benchmark Results
+=====================================
+Date:       2026-04-10 08:37:42
+Host:       P16SG3
+PS Version: 7.6.0
+OS:         Microsoft Windows NT 10.0.26200.0
+
+Section                                               AvgMs  MinMs  MaxMs Iterations
+-------                                               -----  -----  ----- ----------
+TOTAL: Full Profile.ps1 load                         341.70  75.00 863.00          3
+Git: upstream check                                   29.70  25.00  39.00          3
+Git: fetch --quiet                                   319.00 315.00 325.00          3
+Git: rev-parse HEAD vs @{u}                           52.30  48.00  61.00          3
+Git: diff --quiet HEAD                                31.00  27.00  38.00          3
+Functions: ALL files dot-sourced                      55.70  51.00  63.00          3
+  Function: Scan-Network.ps1                           7.50   4.00  11.00          2
+  Function: Test-EmailAuthentication.ps1               3.50   3.00   4.00          2
+  Function: Get-SystemDetails.ps1                      3.50   3.00   4.00          2
+  Function: Show-TechMenu.ps1                          3.50   3.00   4.00          2
+  Function: Test-Network.ps1                           3.00   3.00   3.00          2
+  Function: Invoke-InternetSpeedTest.ps1               3.00   3.00   3.00          2
+  Function: Get-BitLockerInformation.ps1               3.00   3.00   3.00          2
+  Function: Test-Internet.ps1                          2.50   2.00   3.00          2
+  Function: Update-ProfileRepo.ps1                     3.00   3.00   3.00          2
+  Function: test-site.ps1                              2.50   2.00   3.00          2
+  Function: FlushMe.ps1                                2.50   2.00   3.00          2
+  Function: renew-safe.ps1                             3.50   3.00   4.00          2
+  Function: publicip.ps1                               3.50   3.00   4.00          2
+  Function: Get-ClipLength.ps1                         3.00   3.00   3.00          2
+  Function: npp.ps1                                    3.00   3.00   3.00          2
+  Function: gitprofile.ps1                             3.00   3.00   3.00          2
+PSReadLine: Get-Module -ListAvailable                 18.70  14.00  28.00          3
+PSReadLine: configuration (Set-PSReadLineOption)       3.30   0.00  10.00          3
+Module: Get-Module -ListAvailable 'Terminal-Icons'    16.70  13.00  23.00          3
+Module: Import-Module Terminal-Icons                   4.30   1.00  11.00          3
+Module: Get-Module -ListAvailable 'Pester'            43.00  14.00  99.00          3
+Module: Get-Module -ListAvailable 'SecretManagement'  37.00  13.00  84.00          3
+Module: Get-Module -ListAvailable 'SecretStore'       48.70  15.00 115.00          3
+Test-Path checks (repo + functions dir)                3.70   0.00  11.00          3
+
+

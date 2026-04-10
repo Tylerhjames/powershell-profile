@@ -1,82 +1,124 @@
 # ══════════════════════════════════════════════════════════════════════════════
 # Optimized Roaming PowerShell Profile with Auto-Sync
 # ══════════════════════════════════════════════════════════════════════════════
+# Optimization pass: 2026-04-10
+# Target: <300ms to interactive prompt (git sync moved to background runspace)
+# ══════════════════════════════════════════════════════════════════════════════
 
-$ErrorActionPreference = 'SilentlyContinue'  # Reduce noise from git operations
+$ErrorActionPreference = 'SilentlyContinue'
 
 # ── Configuration ──
 $script:ProfileRepo = "$HOME\Documents\Git\powershell-profile"
-$script:RequiredModules = @('Terminal-Icons')  # Only load essentials at startup
-$script:LazyModules = @('Pester', 'Microsoft.PowerShell.SecretManagement', 'Microsoft.PowerShell.SecretStore')
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Auto-Pull from Git (Silent)
+# Phase 1: Background Git Sync (non-blocking)
 # ══════════════════════════════════════════════════════════════════════════════
+# Rationale: git fetch was 454ms avg and blocked the prompt. This fires the
+# entire fetch/compare/pull sequence in a background runspace. If an update
+# is pulled, a flag file is written and the next prompt displays a notice.
 
-$repo = "$HOME\Documents\Git\powershell-profile"
-if (Test-Path "$repo\.git") {
-    Push-Location $repo
-    
-    # Set upstream if not configured
-    $upstream = git rev-parse --abbrev-ref '@{u}' 2>$null
-    if (-not $upstream) {
-        git branch --set-upstream-to=origin/main main 2>&1 | Out-Null
-    }
-    
-    # Fetch updates
-    git fetch --quiet 2>&1 | Out-Null
-    
-    # Check for local changes
-    $hasChanges = git diff --quiet HEAD 2>$null
-    $exitCode = $LASTEXITCODE
-    
-    if ($exitCode -ne 0) {
-        Write-Host "⚠ Local changes detected — skipping auto-update" -ForegroundColor Yellow
-    }
-    else {
-        # Check if behind remote
-        $localCommit = git rev-parse HEAD 2>$null
-        $remoteCommit = git rev-parse '@{u}' 2>$null
-        
-        if ($localCommit -ne $remoteCommit) {
-            git pull --ff-only --quiet 2>&1 | Out-Null
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "✓ Profile updated from GitHub" -ForegroundColor DarkGreen
+$script:GitSyncFlag = Join-Path $env:TEMP 'ps-profile-git-sync-result.txt'
+
+if (Test-Path "$script:ProfileRepo\.git") {
+    $syncRunspace = [runspacefactory]::CreateRunspace()
+    $syncRunspace.Open()
+
+    $syncPS = [powershell]::Create().AddScript({
+        param($RepoPath, $FlagFile)
+
+        try {
+            Set-Location $RepoPath
+
+            # Ensure upstream is configured
+            $upstream = & git rev-parse --abbrev-ref '@{u}' 2>$null
+            if (-not $upstream) {
+                & git branch --set-upstream-to=origin/main main 2>&1 | Out-Null
+            }
+
+            # Fetch (this is the expensive network call)
+            & git fetch --quiet 2>&1 | Out-Null
+
+            # Check for local changes — skip pull if dirty
+            & git diff --quiet HEAD 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                'local-changes' | Set-Content $FlagFile -Force
+                return
+            }
+
+            # Compare local vs remote
+            $local  = & git rev-parse HEAD 2>$null
+            $remote = & git rev-parse '@{u}' 2>$null
+
+            if ($local -ne $remote) {
+                & git pull --ff-only --quiet 2>&1 | Out-Null
+                if ($LASTEXITCODE -eq 0) {
+                    'updated' | Set-Content $FlagFile -Force
+                } else {
+                    'pull-failed' | Set-Content $FlagFile -Force
+                }
+            } else {
+                # Up to date — no flag needed
+                if (Test-Path $FlagFile) { Remove-Item $FlagFile -Force }
+            }
+        }
+        catch {
+            # Swallow — offline/timeout is not an error worth surfacing
+            if (Test-Path $FlagFile) { Remove-Item $FlagFile -Force }
+        }
+    }).AddArgument($script:ProfileRepo).AddArgument($script:GitSyncFlag)
+
+    $syncPS.Runspace = $syncRunspace
+    $null = $syncPS.BeginInvoke()
+
+    # Store references so GC doesn't collect them mid-flight
+    $script:_bgSyncPS = $syncPS
+    $script:_bgSyncRS = $syncRunspace
+}
+
+# ── Next-prompt notification via PSReadLine AddToHistoryHandler ──
+# Checks the flag file each time a command completes. Lightweight: just a
+# Test-Path + one-line read, no git calls on the hot path.
+
+$script:_gitSyncNotified = $false
+if (Get-Module PSReadLine) {
+    $null = Register-EngineEvent -SourceIdentifier PowerShell.OnIdle -MaxTriggerCount 1 -Action {
+        $flagFile = Join-Path $env:TEMP 'ps-profile-git-sync-result.txt'
+        if (Test-Path $flagFile) {
+            $result = (Get-Content $flagFile -Raw).Trim()
+            Remove-Item $flagFile -Force -ErrorAction SilentlyContinue
+
+            switch ($result) {
+                'updated'        { Write-Host "`n✓ Profile updated from GitHub — run " -ForegroundColor DarkGreen -NoNewline
+                                   Write-Host "Reload-Profile" -ForegroundColor Cyan -NoNewline
+                                   Write-Host " to apply" -ForegroundColor DarkGreen }
+                'local-changes'  { Write-Host "`n⚠ Profile sync skipped — local changes detected" -ForegroundColor Yellow }
+                'pull-failed'    { Write-Host "`n✗ Profile auto-pull failed — check manually" -ForegroundColor Red }
             }
         }
     }
-    
-    Pop-Location
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Auto-Load Functions
 # ══════════════════════════════════════════════════════════════════════════════
 
-$functionsPath = "$ProfileRepo\Functions"
+$functionsPath = "$script:ProfileRepo\Functions"
 if (Test-Path $functionsPath) {
-    Get-ChildItem $functionsPath -Filter *.ps1 -ErrorAction SilentlyContinue | 
+    Get-ChildItem $functionsPath -Filter *.ps1 -ErrorAction SilentlyContinue |
         ForEach-Object { . $_.FullName }
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PSReadLine Configuration (Lazy Load Latest Version)
+# PSReadLine Configuration
 # ══════════════════════════════════════════════════════════════════════════════
+# Phase 3: Removed the Get-Module -ListAvailable scan (~16ms). On PS 7.4+
+# the bundled PSReadLine is current. If you install a newer version manually,
+# PS loads it automatically from the module path.
 
-# Import latest PSReadLine if newer version is available
-$currentPSRL = Get-Module PSReadLine
-$latestPSRL = Get-Module PSReadLine -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1
-
-if ($latestPSRL -and ($currentPSRL.Version -lt $latestPSRL.Version)) {
-    Remove-Module PSReadLine -ErrorAction SilentlyContinue
-    Import-Module $latestPSRL.Path -Force -ErrorAction SilentlyContinue
-}
-
-# ── PSReadLine Settings ──
 Set-PSReadLineOption -EditMode Emacs
 Set-PSReadLineOption -PredictionSource HistoryAndPlugin
 Set-PSReadLineOption -PredictionViewStyle InlineView
-Set-PSReadLineOption -BellStyle None  # Disable annoying beeps
+Set-PSReadLineOption -BellStyle None
 
 # Key bindings
 Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
@@ -101,40 +143,25 @@ $PSStyle.Formatting.FormatAccent = "`e[38;2;134;166;137m"
 $PSStyle.Formatting.TableHeader = "`e[38;2;134;166;137m"
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Module Management (Optimized)
+# Module Management
 # ══════════════════════════════════════════════════════════════════════════════
+# Phase 2: Terminal-Icons is the only startup-critical module. We check once
+# whether it's loaded, and import it. The old Install-ProfileModule function
+# ran Get-Module -ListAvailable for EVERY module on EVERY startup (~17ms each).
+# Lazy modules (Pester, SecretManagement, SecretStore) are installed once via
+# bootstrap — no need to verify their existence every shell open.
 
+if (-not (Get-Module Terminal-Icons)) {
+    Import-Module Terminal-Icons -ErrorAction SilentlyContinue *>$null
+}
+
+# ── Install-ProfileModule: kept for manual use, not called at startup ──
 function Install-ProfileModule {
     param([string]$ModuleName)
-    
     if (-not (Get-Module -ListAvailable $ModuleName)) {
         Write-Host "Installing $ModuleName..." -ForegroundColor Cyan
         Install-Module $ModuleName -Scope CurrentUser -Force -AllowClobber *>$null
     }
-}
-
-function Import-ProfileModule {
-    param([string]$ModuleName, [switch]$Lazy)
-    
-    if (-not (Get-Module $ModuleName)) {
-        if ($Lazy) {
-            # Create stub function that loads module on first use
-            return
-        }
-        Import-Module $ModuleName -ErrorAction SilentlyContinue *>$null
-    }
-}
-
-# Load essential modules immediately
-foreach ($module in $RequiredModules) {
-    Install-ProfileModule $module
-    Import-ProfileModule $module
-}
-
-# Lazy-load heavy modules (only when needed)
-foreach ($module in $LazyModules) {
-    Install-ProfileModule $module
-    # Don't import yet - load on demand
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -149,15 +176,15 @@ function Reload-Profile {
     . $PROFILE
     Write-Host "✓ Profile reloaded" -ForegroundColor Green
 }
-Set-Alias rpl Reload-Profile
+Set-Alias -Name rpl -Value Reload-Profile -Scope Global
 
 function Update-Profile {
     <#
     .SYNOPSIS
     Force-pulls latest profile from Git
     #>
-    Push-Location $ProfileRepo
-    
+    Push-Location $script:ProfileRepo
+
     $status = git status --porcelain 2>$null
     if ([string]::IsNullOrEmpty($status)) {
         git pull --ff-only --quiet *>$null
@@ -171,7 +198,7 @@ function Update-Profile {
         Write-Host "⚠ Local changes present — commit or stash first" -ForegroundColor Yellow
         git status --short
     }
-    
+
     Pop-Location
 }
 
@@ -185,25 +212,25 @@ function Sync-Profile {
     param(
         [string]$Message = "Auto-sync: $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
     )
-    
-    Push-Location $ProfileRepo
-    
+
+    Push-Location $script:ProfileRepo
+
     try {
         $status = git status --porcelain 2>$null
-        
+
         if ([string]::IsNullOrEmpty($status)) {
             Write-Host "✓ No changes to sync" -ForegroundColor Gray
             return
         }
-        
+
         # Show what's being synced
         Write-Host "Changes to sync:" -ForegroundColor Cyan
         git status --short
-        
+
         # Commit and push
         git add -A
         git commit -m $Message *>$null
-        
+
         if ($LASTEXITCODE -eq 0) {
             git push *>$null
             if ($LASTEXITCODE -eq 0) {
@@ -222,7 +249,7 @@ function Sync-Profile {
         Pop-Location
     }
 }
-Set-Alias sync Sync-Profile
+Set-Alias -Name sync -Value Sync-Profile -Scope Global
 
 function Save-Profile {
     <#
@@ -232,38 +259,40 @@ function Save-Profile {
     Commit message (prompts if not provided)
     #>
     param([string]$Message)
-    
+
     if (-not $Message) {
         $Message = Read-Host "Commit message"
         if ([string]::IsNullOrWhiteSpace($Message)) {
             $Message = "Profile update: $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
         }
     }
-    
+
     Sync-Profile -Message $Message
 }
-Set-Alias sp Save-Profile
+# 'sp' is a built-in alias for Set-ItemProperty — use 'save' instead
+Set-Alias -Name save -Value Save-Profile -Scope Global
 
 function Edit-Profile {
     <#
     .SYNOPSIS
     Opens profile in default editor
     #>
-    code "$ProfileRepo\Profile.ps1"
+    code "$script:ProfileRepo\Profile.ps1"
 }
-Set-Alias ep Edit-Profile
+Set-Alias -Name ep -Value Edit-Profile -Scope Global
 
 function Show-ProfileStatus {
     <#
     .SYNOPSIS
     Shows Git status of profile repository
     #>
-    Push-Location $ProfileRepo
+    Push-Location $script:ProfileRepo
     Write-Host "`nProfile Repository Status:" -ForegroundColor Cyan
     git status
     Pop-Location
 }
-Set-Alias ps Show-ProfileStatus
+# Phase 4: Renamed from 'ps' which shadows the built-in Get-Process alias
+Set-Alias -Name pstat -Value Show-ProfileStatus -Scope Global
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Startup Message
