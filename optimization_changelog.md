@@ -1,5 +1,24 @@
 # PowerShell Profile Optimization Changelog
 
+## 2026-04-10 — Added Start-Pulse & Updated Tech Menu
+
+**File:** `Functions/Start-Pulse.ps1` (new, ~284 lines)
+**Source:** Wrapped standalone `Pulse.ps1` connectivity monitor into a proper function.
+
+**Changes from standalone version:**
+- Wrapped in `Start-Pulse` function with `[CmdletBinding()]` and comment-based help
+- `exit` calls replaced with `return` to avoid closing the shell session
+- Internal helper functions prefixed with `_Pulse_` to avoid namespace collisions
+- Added alias: `pulse` (`-Scope Global`)
+
+**File:** `Functions/Show-TechMenu.ps1` (modified)
+**Change:** Added two new menu items (positions 10 and 11):
+- **Pulse Monitor** — launches `Start-Pulse` (TCP/ICMP connectivity & latency tracker)
+- **Server Inventory** — launches `Invoke-ServerInventory` (full system audit report)
+Both entries use the existing `Get-Command` guard pattern with fallback error message.
+
+---
+
 ## 2026-04-10 — Added Invoke-ServerInventory to Profile
 
 **File:** `Functions/Invoke-ServerInventory.ps1` (new, ~680 lines)

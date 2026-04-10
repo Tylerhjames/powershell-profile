@@ -148,6 +148,30 @@ function Show-TechMenu {
             }
             Icon        = "🔒"
         }
+        @{
+            Name        = "Pulse Monitor"
+            Description = "TCP/ICMP connectivity & latency tracker"
+            Command     = {
+                if (Get-Command Start-Pulse -ErrorAction SilentlyContinue) {
+                    Start-Pulse
+                } else {
+                    Write-Host "❌ Start-Pulse function not found. Try: rpl" -ForegroundColor Red
+                }
+            }
+            Icon        = "💓"
+        }
+        @{
+            Name        = "Server Inventory"
+            Description = "Full system audit report (HTML + TXT)"
+            Command     = {
+                if (Get-Command Invoke-ServerInventory -ErrorAction SilentlyContinue) {
+                    Invoke-ServerInventory
+                } else {
+                    Write-Host "❌ Invoke-ServerInventory function not found. Try: rpl" -ForegroundColor Red
+                }
+            }
+            Icon        = "📋"
+        }
     )
     
     # ══════════════════════════════════════════════════════════════════════════
