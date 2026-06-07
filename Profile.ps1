@@ -93,6 +93,32 @@ if (Test-Path $functionsPath) {
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Lazy winget self-heal shim
+# ══════════════════════════════════════════════════════════════════════════════
+# Why: roaming between machines, winget intermittently disappears (PATH loss or
+# per-user package deregistration). Rather than paying a repair cost at every
+# startup, this defines a 'winget' function ONLY when winget.exe doesn't
+# resolve. First winget invocation triggers Repair-Winget (PATH fix →
+# re-register → Repair-WinGetPackageManager), then replays the original
+# command. Startup cost when winget is healthy: one Get-Command (~1ms).
+# Repair-Winget itself lives in Functions\Repair-Winget.ps1.
+
+if (-not (Get-Command winget.exe -CommandType Application -ErrorAction SilentlyContinue)) {
+    function global:winget {
+        Write-Host 'winget not found — attempting self-repair...' -ForegroundColor Yellow
+        if (Repair-Winget) {
+            # Remove the shim so winget.exe resolves normally from here on
+            Remove-Item Function:\global:winget -Force -ErrorAction SilentlyContinue
+            if ($args.Count -gt 0) { & winget.exe @args }
+        } else {
+            Write-Host 'Self-repair failed. Run ' -ForegroundColor Red -NoNewline
+            Write-Host 'Repair-Winget -Verbose' -ForegroundColor Cyan -NoNewline
+            Write-Host ' for details.' -ForegroundColor Red
+        }
+    }
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
 # PSReadLine Configuration
 # ══════════════════════════════════════════════════════════════════════════════
 # Phase 3: Removed the Get-Module -ListAvailable scan (~16ms). On PS 7.4+
@@ -100,9 +126,22 @@ if (Test-Path $functionsPath) {
 # PS loads it automatically from the module path.
 
 Set-PSReadLineOption -EditMode Emacs
-Set-PSReadLineOption -PredictionSource HistoryAndPlugin
-Set-PSReadLineOption -PredictionViewStyle InlineView
 Set-PSReadLineOption -BellStyle None
+
+# Prediction requires a VT-capable, non-redirected console. In hosts that lack
+# it (legacy conhost, redirected/piped output, some embedded terminals) enabling
+# prediction throws a TERMINATING error that $ErrorActionPreference cannot
+# swallow. Because the loader stub dot-sources this file inside a try/catch,
+# that exception would abort the ENTIRE profile — losing every function, alias,
+# theme, and the load banner defined below. Isolate it so those hosts simply
+# run without inline prediction instead of loading nothing.
+try {
+    Set-PSReadLineOption -PredictionSource HistoryAndPlugin
+    Set-PSReadLineOption -PredictionViewStyle InlineView
+}
+catch {
+    # No VT / redirected output — skip prediction; the rest of the profile loads.
+}
 
 # Key bindings
 Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
