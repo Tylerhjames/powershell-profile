@@ -46,42 +46,20 @@ function Show-TechMenu {
             }
             Icon        = "🌐"
         }
-        @{ 
-            Name        = "Public IP"
-            Description = "Show public IP address"
-            Command     = { 
-                if (Get-Command publicip -ErrorAction SilentlyContinue) {
-                    & publicip
-                } else {
-                    try {
-                        $ip = (Invoke-RestMethod 'https://api.ipify.org?format=json').ip
-                        Write-Host "`n✓ Public IP: $ip`n" -ForegroundColor Green
-                    } catch {
-                        Write-Host "❌ Failed to get IP: $_" -ForegroundColor Red
-                    }
-                }
-            }
-            Icon        = "🔍"
-        }
-        @{ 
+        @{
             Name        = "Renew Network"
-            Description = "Release and renew DHCP"
-            Command     = { 
-                if (Get-Command renew-safe -ErrorAction SilentlyContinue) {
-                    & renew-safe
+            Description = "Flush DNS + release/renew DHCP"
+            Command     = {
+                if (Get-Command FlushMe -ErrorAction SilentlyContinue) {
+                    FlushMe
                 } else {
+                    ipconfig /flushdns
                     ipconfig /release
                     Start-Sleep 2
                     ipconfig /renew
                 }
             }
             Icon        = "🔄"
-        }
-        @{ 
-            Name        = "Flush DNS"
-            Description = "Clear DNS resolver cache"
-            Command     = { ipconfig /flushdns }
-            Icon        = "🗑️"
         }
         @{ 
             Name        = "Email Auth Check"

@@ -93,8 +93,8 @@ $functionsPath = "$script:ProfileRepo\Functions"
 if (Test-Path $functionsPath) {
     # ── Eager: small utilities needed immediately (<40 lines each) ──
     foreach ($f in @(
-        'FlushMe.ps1', 'Get-ClipLength.ps1', 'npp.ps1',
-        'publicip.ps1', 'renew-safe.ps1', 'test-site.ps1',
+        'Get-ClipLength.ps1', 'npp.ps1',
+        'renew-safe.ps1', 'test-site.ps1',
         'Repair-Winget.ps1'
     )) {
         $fp = Join-Path $functionsPath $f
