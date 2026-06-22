@@ -123,13 +123,13 @@ function Get-SystemDetails {
             Write-Host "$speed MHz" -ForegroundColor White
             Write-Host "│    │  Type       : " -NoNewline -ForegroundColor DarkGray
             
-            $memType = switch ($module.MemoryType) {
+            $memType = switch ($module.SMBIOSMemoryType) {
                 20 { "DDR" }
                 21 { "DDR2" }
                 24 { "DDR3" }
                 26 { "DDR4" }
                 34 { "DDR5" }
-                default { "Unknown ($($module.MemoryType))" }
+                default { "Unknown ($($module.SMBIOSMemoryType))" }
             }
             Write-Host $memType -ForegroundColor White
             
@@ -140,7 +140,7 @@ function Get-SystemDetails {
         }
         
         # RAM upgrade recommendation
-        $totalSlots = (Get-CimInstance Win32_PhysicalMemoryArray).MemoryDevices
+        $totalSlots = (Get-CimInstance Win32_PhysicalMemoryArray | Measure-Object -Property MemoryDevices -Sum).Sum
         $usedSlots = $ramModules.Count
         $emptySlots = $totalSlots - $usedSlots
         

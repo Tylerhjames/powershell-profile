@@ -1,7 +1,7 @@
 function Renew-Safe {
     # Detect remote session via RDP session name or terminal services env var
     $isRemote = ($env:SESSIONNAME -match 'RDP') -or
-                ($env:SESSIONNAME -eq 'Console' -eq $false) -or
+                ($env:SESSIONNAME -ne 'Console') -or
                 ($null -ne $env:CLIENTNAME -and $env:CLIENTNAME -ne '' -and $env:CLIENTNAME -ne $env:COMPUTERNAME)
 
     if ($isRemote) {

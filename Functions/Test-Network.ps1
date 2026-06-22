@@ -222,7 +222,7 @@ function Test-Network {
         
         # Calculate results
         $seconds = $stopwatch.Elapsed.TotalSeconds
-        $mbps = [math]::Round((($totalBytes * 8) / 1MB) / $seconds, 2)
+        $mbps = [math]::Round((($totalBytes * 8) / 1000000) / $seconds, 2)
         $mbytes = [math]::Round($totalBytes / 1MB, 2)
         
         return @{

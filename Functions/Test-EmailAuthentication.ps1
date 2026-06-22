@@ -150,12 +150,12 @@ function Test-EmailAuthentication {
             # Detect email platform
             $mxString = ($sortedMX.NameExchange -join " ").ToLower()
             $platform = switch -Regex ($mxString) {
-                'outlook\.com|protection\.outlook' { 'Microsoft 365'; break }
-                'google\.com|googlemail' { 'Google Workspace'; break }
                 'mail\.protection\.outlook' { 'Microsoft 365 (EOP)'; break }
-                'proofpoint' { 'Proofpoint'; break }
-                'mimecast' { 'Mimecast'; break }
-                'barracuda' { 'Barracuda'; break }
+                'outlook\.com'              { 'Microsoft 365'; break }
+                'google\.com|googlemail'    { 'Google Workspace'; break }
+                'proofpoint'                { 'Proofpoint'; break }
+                'mimecast'                  { 'Mimecast'; break }
+                'barracuda'                 { 'Barracuda'; break }
                 default { 'Unknown/Self-hosted' }
             }
             

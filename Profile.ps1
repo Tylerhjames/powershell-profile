@@ -68,11 +68,12 @@ if (Test-Path "$script:ProfileRepo\.git") {
     }).AddArgument($script:ProfileRepo).AddArgument($script:GitSyncFlag)
 
     $syncPS.Runspace = $syncRunspace
-    $null = $syncPS.BeginInvoke()
+    $global:_bgSyncHandle = $syncPS.BeginInvoke()
 
-    # Store references so GC doesn't collect them mid-flight
-    $script:_bgSyncPS = $syncPS
-    $script:_bgSyncRS = $syncRunspace
+    # Store references for OnIdle cleanup (global because event actions
+    # run in their own session state and cannot see $script: vars)
+    $global:_bgSyncPS = $syncPS
+    $global:_bgSyncRS = $syncRunspace
 }
 
 # ── Next-prompt notification via PSReadLine AddToHistoryHandler ──
@@ -82,13 +83,49 @@ if (Test-Path "$script:ProfileRepo\.git") {
 $script:_gitSyncNotified = $false
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Auto-Load Functions
+# Auto-Load Functions (eager + lazy)
 # ══════════════════════════════════════════════════════════════════════════════
+# Small utilities are dot-sourced immediately. Large functions (~3,800 lines
+# total) use lightweight stubs that dot-source on first invocation, avoiding
+# the parse cost on every shell open.
 
 $functionsPath = "$script:ProfileRepo\Functions"
 if (Test-Path $functionsPath) {
-    foreach ($f in Get-ChildItem $functionsPath -Filter *.ps1 -ErrorAction SilentlyContinue) {
-        . $f.FullName
+    # ── Eager: small utilities needed immediately (<40 lines each) ──
+    foreach ($f in @(
+        'FlushMe.ps1', 'Get-ClipLength.ps1', 'npp.ps1',
+        'publicip.ps1', 'renew-safe.ps1', 'test-site.ps1',
+        'Repair-Winget.ps1'
+    )) {
+        $fp = Join-Path $functionsPath $f
+        if (Test-Path $fp) { . $fp }
+    }
+
+    # ── Lazy: heavy functions loaded on first call ──
+    foreach ($def in @(
+        @{ Name = 'Get-BitLockerInformation'; File = 'Get-BitLockerInformation.ps1' }
+        @{ Name = 'Get-SystemDetails';        File = 'Get-SystemDetails.ps1';        Aliases = 'sysinfo','sys' }
+        @{ Name = 'Invoke-InternetSpeedTest'; File = 'Invoke-InternetSpeedTest.ps1'; Aliases = 'speedtest' }
+        @{ Name = 'Invoke-ServerInventory';   File = 'Invoke-ServerInventory.ps1';   Aliases = 'inventory','serverinv' }
+        @{ Name = 'Scan-Network';             File = 'Scan-Network.ps1' }
+        @{ Name = 'Show-TechMenu';            File = 'Show-TechMenu.ps1';           Aliases = 'tech','techmenu' }
+        @{ Name = 'Start-Pulse';              File = 'Start-Pulse.ps1';             Aliases = 'pulse' }
+        @{ Name = 'Test-EmailAuthentication'; File = 'Test-EmailAuthentication.ps1'; Aliases = 'Test-EmailDNS','Check-EmailDNS','Test-DMARC' }
+        @{ Name = 'Test-Internet';            File = 'Test-Internet.ps1' }
+        @{ Name = 'Test-Network';             File = 'Test-Network.ps1';            Aliases = 'net-test','Invoke-NetTest' }
+    )) {
+        $filePath = Join-Path $functionsPath $def.File
+        $funcName = $def.Name
+        Set-Item "Function:\global:$funcName" -Value ([scriptblock]::Create(@"
+            Remove-Item Function:\$funcName -Force
+            . '$filePath'
+            & $funcName @args
+"@))
+        if ($def.Aliases) {
+            foreach ($a in $def.Aliases) {
+                Set-Alias -Name $a -Value $funcName -Scope Global
+            }
+        }
     }
 }
 
@@ -125,32 +162,7 @@ if (-not (Get-Command winget.exe -CommandType Application -ErrorAction SilentlyC
 # the bundled PSReadLine is current. If you install a newer version manually,
 # PS loads it automatically from the module path.
 
-Set-PSReadLineOption -EditMode Emacs
-Set-PSReadLineOption -BellStyle None
-
-# Prediction requires a VT-capable, non-redirected console. In hosts that lack
-# it (legacy conhost, redirected/piped output, some embedded terminals) enabling
-# prediction throws a TERMINATING error that $ErrorActionPreference cannot
-# swallow. Because the loader stub dot-sources this file inside a try/catch,
-# that exception would abort the ENTIRE profile — losing every function, alias,
-# theme, and the load banner defined below. Isolate it so those hosts simply
-# run without inline prediction instead of loading nothing.
-try {
-    Set-PSReadLineOption -PredictionSource HistoryAndPlugin
-    Set-PSReadLineOption -PredictionViewStyle InlineView
-}
-catch {
-    # No VT / redirected output — skip prediction; the rest of the profile loads.
-}
-
-# Key bindings
-Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
-Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
-Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
-Set-PSReadLineKeyHandler -Chord 'Ctrl+r' -Function ReverseSearchHistory
-
-# ── Matte Pastel Theme ──
-Set-PSReadLineOption -Colors @{
+Set-PSReadLineOption -EditMode Emacs -BellStyle None -Colors @{
     Command          = '#D4B847'
     Parameter        = '#C7A8C7'
     Operator         = '#B0C4DE'
@@ -161,6 +173,18 @@ Set-PSReadLineOption -Colors @{
     Selection        = '#5C6B7A'
 }
 
+# Prediction throws a terminating error on non-VT hosts (legacy conhost,
+# piped output). Isolate so those hosts run without inline prediction.
+try {
+    Set-PSReadLineOption -PredictionSource HistoryAndPlugin -PredictionViewStyle InlineView
+}
+catch {}
+
+Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
+Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
+Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
+Set-PSReadLineKeyHandler -Chord 'Ctrl+r' -Function ReverseSearchHistory
+
 # ── Muted Sage Green Formatting ──
 $PSStyle.Formatting.FormatAccent = "`e[38;2;134;166;137m"
 $PSStyle.Formatting.TableHeader = "`e[38;2;134;166;137m"
@@ -168,15 +192,10 @@ $PSStyle.Formatting.TableHeader = "`e[38;2;134;166;137m"
 # ══════════════════════════════════════════════════════════════════════════════
 # Module Management
 # ══════════════════════════════════════════════════════════════════════════════
-# Phase 2: Terminal-Icons is the only startup-critical module. We check once
-# whether it's loaded, and import it. The old Install-ProfileModule function
-# ran Get-Module -ListAvailable for EVERY module on EVERY startup (~17ms each).
-# Lazy modules (Pester, SecretManagement, SecretStore) are installed once via
-# bootstrap — no need to verify their existence every shell open.
-
-if (-not (Get-Module Terminal-Icons)) {
-    Import-Module Terminal-Icons -ErrorAction SilentlyContinue *>$null
-}
+# Terminal-Icons import is deferred to the OnIdle handler (~30-50ms saved).
+# OnIdle fires before the user's first keystroke, so icons are available for
+# the first 'ls'. Lazy modules (Pester, SecretManagement, SecretStore) are
+# installed once via bootstrap — no need to verify every shell open.
 
 # ── Install-ProfileModule: kept for manual use, not called at startup ──
 function Install-ProfileModule {
@@ -380,10 +399,10 @@ if ($shouldCheck) {
     }).AddArgument($PSVersionTable.PSVersion.Major).AddArgument($PSVersionTable.PSVersion.Minor).AddArgument($PSVersionTable.PSVersion.Patch).AddArgument($script:PSVersionFlag)
 
     $verPS.Runspace = $verRunspace
-    $null = $verPS.BeginInvoke()
+    $global:_bgVerHandle = $verPS.BeginInvoke()
 
-    $script:_bgVerPS = $verPS
-    $script:_bgVerRS = $verRunspace
+    $global:_bgVerPS = $verPS
+    $global:_bgVerRS = $verRunspace
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -394,6 +413,11 @@ if ($shouldCheck) {
 
 if (Get-Module PSReadLine) {
     $null = Register-EngineEvent -SourceIdentifier PowerShell.OnIdle -MaxTriggerCount 1 -Action {
+        # ── Deferred Terminal-Icons import (saves ~30-50ms at startup) ──
+        if (-not (Get-Module Terminal-Icons)) {
+            Import-Module Terminal-Icons -Global -ErrorAction SilentlyContinue *>$null
+        }
+
         # ── Git sync result ──
         $gitFlag = Join-Path $env:TEMP 'ps-profile-git-sync-result.txt'
         if (Test-Path $gitFlag) {
@@ -420,6 +444,22 @@ if (Get-Module PSReadLine) {
                 Write-Host "winget upgrade Microsoft.PowerShell" -ForegroundColor Cyan
             }
             Remove-Item $verFlag -Force -ErrorAction SilentlyContinue
+        }
+
+        # ── Dispose background runspaces to prevent memory leaks ──
+        foreach ($prefix in @('_bgSync', '_bgVer')) {
+            $ps     = (Get-Variable "${prefix}PS"     -Scope Global -ErrorAction SilentlyContinue).Value
+            $handle = (Get-Variable "${prefix}Handle" -Scope Global -ErrorAction SilentlyContinue).Value
+            $rs     = (Get-Variable "${prefix}RS"     -Scope Global -ErrorAction SilentlyContinue).Value
+            if ($ps -and (-not $handle -or $handle.IsCompleted)) {
+                try { if ($handle) { $ps.EndInvoke($handle) } } catch {}
+                try { $ps.Dispose() } catch {}
+                if ($rs) { try { $rs.Dispose() } catch {} }
+            }
+            # Clear global refs regardless — this is the only OnIdle tick
+            # (MaxTriggerCount 1). Any still-running tasks become eligible
+            # for GC finalizer cleanup, same as prior behavior.
+            Remove-Variable "${prefix}PS","${prefix}Handle","${prefix}RS" -Scope Global -ErrorAction SilentlyContinue
         }
     }
 }

@@ -167,8 +167,8 @@ function Invoke-InternetSpeedTest {
     # Parse and Display Results
     # ══════════════════════════════════════════════════════════════════════════
     
-    $downloadMbps = [math]::Round(($result.download.bandwidth * 8) / 1MB, 2)
-    $uploadMbps = [math]::Round(($result.upload.bandwidth * 8) / 1MB, 2)
+    $downloadMbps = [math]::Round(($result.download.bandwidth * 8) / 1000000, 2)
+    $uploadMbps = [math]::Round(($result.upload.bandwidth * 8) / 1000000, 2)
     $latencyMs = [math]::Round($result.ping.latency, 1)
     $jitterMs = [math]::Round($result.ping.jitter, 1)
     
