@@ -155,83 +155,118 @@ function Find-ExecutableInPath {
 function Ensure-PowerShell7 {
     <#
     .SYNOPSIS
-    Ensures PowerShell 7+ is installed and optionally relaunches bootstrap
+    Ensures PowerShell 7+ is installed via winget (preferred) or MSI fallback.
+    Ignores Microsoft Store installs — the Store version runs in a sandboxed
+    app container that can cause scoping and path issues with roaming profiles.
     #>
     param([switch]$RelaunchIfNeeded)
-    
+
     $currentVersion = $PSVersionTable.PSVersion
-    
-    if ($currentVersion -ge $Config.MinPowerShellVer) {
-        Write-Ok "Running PowerShell $currentVersion"
-        return $true
-    }
-    
-    Write-Info "Current PowerShell version: $currentVersion"
-    
-    # Check if PowerShell 7 is installed
-    $pwsh = Find-ExecutableInPath -Name 'pwsh' -FallbackPaths @(
+
+    # Only accept the MSI install path — not the Store path ($env:LocalAppData)
+    $msiInstallPaths = @(
         "$env:ProgramFiles\PowerShell\7\pwsh.exe",
-        "${env:ProgramFiles(x86)}\PowerShell\7\pwsh.exe",
-        "$env:LocalAppData\Microsoft\PowerShell\7\pwsh.exe"
+        "${env:ProgramFiles(x86)}\PowerShell\7\pwsh.exe"
     )
-    
+
+    # Check if we're already running PS7+ from an MSI install
+    if ($currentVersion -ge $Config.MinPowerShellVer) {
+        $currentExe = (Get-Process -Id $PID).Path
+        $isStoreInstall = $currentExe -match [regex]::Escape($env:LocalAppData)
+
+        if ($isStoreInstall) {
+            Write-Warn "Running PowerShell $currentVersion from Microsoft Store"
+            Write-Warn "Store version detected — will install MSI version instead"
+        } else {
+            Write-Ok "Running PowerShell $currentVersion"
+            return $true
+        }
+    } else {
+        Write-Info "Current PowerShell version: $currentVersion"
+    }
+
+    # Look for existing MSI install only (skip Store path)
+    $pwsh = Find-ExecutableInPath -Name 'pwsh' -FallbackPaths $msiInstallPaths
+
+    # If pwsh resolves but it's the Store version, ignore it
+    if ($pwsh -and $pwsh.Source -match [regex]::Escape($env:LocalAppData)) {
+        Write-Warn "Found Store version at $($pwsh.Source) — ignoring"
+        $pwsh = $null
+    }
+
     if (-not $pwsh) {
-        Write-Info "PowerShell 7 not found. Installing latest version..."
-        
-        try {
-            # Get latest release info (with caching)
-            $release = Get-CachedWebContent -Url 'https://api.github.com/repos/PowerShell/PowerShell/releases/latest'
-            
-            $asset = $release.assets | Where-Object { 
-                $_.name -like '*win-x64.msi' 
-            } | Select-Object -First 1
-            
-            if (-not $asset) {
-                throw "No suitable PowerShell 7 MSI found in latest release"
-            }
-            
-            $msiPath = Join-Path $env:TEMP "pwsh7-$($release.tag_name).msi"
-            
-            # Download if not already cached
-            if (-not (Test-Path $msiPath)) {
-                Write-Info "Downloading PowerShell $($release.tag_name)..."
-                Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $msiPath -UseBasicParsing
-            }
-            
-            Write-Info "Installing PowerShell 7 (this may take a minute)..."
-            $msiArgs = @(
-                '/i', "`"$msiPath`"",
-                '/qn',
-                'ADD_EXPLORER_CONTEXT_MENU_OPENPOWERSHELL=1',
-                'ENABLE_PSREMOTING=1',
-                'REGISTER_MANIFEST=1'
-            )
-            
-            $process = Start-Process msiexec.exe -ArgumentList $msiArgs -Wait -PassThru
-            
-            if ($process.ExitCode -eq 0) {
-                Write-Ok "PowerShell 7 installed successfully"
-                
-                # Find the newly installed pwsh
-                $pwsh = Find-ExecutableInPath -Name 'pwsh' -FallbackPaths @(
-                    "$env:ProgramFiles\PowerShell\7\pwsh.exe"
-                )
+        # ── Tier 1: winget (preferred — installs MSI package, not Store) ──
+        $winget = Get-Command winget.exe -CommandType Application -ErrorAction SilentlyContinue
+
+        if ($winget) {
+            Write-Info "Installing PowerShell 7 via winget..."
+            & winget.exe install Microsoft.PowerShell --accept-package-agreements --accept-source-agreements --silent 2>&1 | Out-Null
+
+            if ($LASTEXITCODE -eq 0) {
+                Write-Ok "PowerShell 7 installed via winget"
+                $pwsh = Find-ExecutableInPath -Name 'pwsh' -FallbackPaths $msiInstallPaths
             } else {
-                throw "Installation failed with exit code $($process.ExitCode)"
+                Write-Warn "winget install returned exit code $LASTEXITCODE — trying MSI fallback"
             }
-        } catch {
-            Write-Err "Failed to install PowerShell 7: $_"
-            return $false
+        }
+
+        # ── Tier 2: direct MSI from GitHub (for machines without winget) ──
+        if (-not $pwsh) {
+            Write-Info "Installing PowerShell 7 via MSI..."
+
+            try {
+                $release = Get-CachedWebContent -Url 'https://api.github.com/repos/PowerShell/PowerShell/releases/latest'
+
+                $asset = $release.assets | Where-Object {
+                    $_.name -like '*win-x64.msi'
+                } | Select-Object -First 1
+
+                if (-not $asset) {
+                    throw "No suitable PowerShell 7 MSI found in latest release"
+                }
+
+                $msiPath = Join-Path $env:TEMP "pwsh7-$($release.tag_name).msi"
+
+                if (-not (Test-Path $msiPath)) {
+                    Write-Info "Downloading PowerShell $($release.tag_name)..."
+                    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $msiPath -UseBasicParsing
+                }
+
+                Write-Info "Installing PowerShell 7 (this may take a minute)..."
+                $msiArgs = @(
+                    '/i', "`"$msiPath`"",
+                    '/qn',
+                    'ADD_EXPLORER_CONTEXT_MENU_OPENPOWERSHELL=1',
+                    'ENABLE_PSREMOTING=1',
+                    'REGISTER_MANIFEST=1'
+                )
+
+                $process = Start-Process msiexec.exe -ArgumentList $msiArgs -Wait -PassThru
+
+                if ($process.ExitCode -eq 0) {
+                    Write-Ok "PowerShell 7 installed via MSI"
+                    $pwsh = Find-ExecutableInPath -Name 'pwsh' -FallbackPaths $msiInstallPaths
+                } else {
+                    throw "MSI installation failed with exit code $($process.ExitCode)"
+                }
+            } catch {
+                Write-Err "Failed to install PowerShell 7: $_"
+                return $false
+            }
         }
     } else {
         Write-Ok "PowerShell 7 is installed at: $($pwsh.Source)"
     }
-    
+
     # Relaunch if needed
-    if ($RelaunchIfNeeded -and $currentVersion -lt $Config.MinPowerShellVer) {
-        Write-Info "Relaunching bootstrap under PowerShell 7..."
-        
-        if ($pwsh) {
+    if ($RelaunchIfNeeded -and $pwsh) {
+        $currentExe = (Get-Process -Id $PID).Path
+        $needsRelaunch = ($currentVersion -lt $Config.MinPowerShellVer) -or
+                         ($currentExe -match [regex]::Escape($env:LocalAppData))
+
+        if ($needsRelaunch) {
+            Write-Info "Relaunching bootstrap under PowerShell 7 (MSI)..."
+
             try {
                 $pwshArgs = @(
                     '-NoLogo',
@@ -239,19 +274,17 @@ function Ensure-PowerShell7 {
                     '-ExecutionPolicy', 'Bypass',
                     '-Command', "iwr '$($Config.BootstrapUrl)' -UseBasicParsing | iex"
                 )
-                
+
                 & $pwsh.Source @pwshArgs
                 exit 0
             } catch {
                 Write-Err "Failed to relaunch: $_"
             }
-        } else {
-            Write-Err "PowerShell 7 installed but not found in PATH. Please restart your terminal."
+
+            exit 1
         }
-        
-        exit 1
     }
-    
+
     return $true
 }
 
