@@ -312,11 +312,12 @@ function Test-Network {
     
     # Interactive menu if mode not specified
     if ($Mode -eq 'Interactive') {
-        $Mode = Show-TestMenu
-        if (-not $Mode) {
+        $selectedMode = Show-TestMenu
+        if (-not $selectedMode) {
             Write-Host "`nTest cancelled.`n" -ForegroundColor Gray
             return
         }
+        $Mode = $selectedMode
     }
     
     # Internet speed test (separate function)
