@@ -119,6 +119,8 @@ if (Test-Path $functionsPath) {
         Set-Item "Function:\global:$funcName" -Value ([scriptblock]::Create(@"
             Remove-Item Function:\$funcName -Force
             . '$filePath'
+            `$_fn = Get-Item Function:\$funcName -ErrorAction SilentlyContinue
+            if (`$_fn) { Set-Item Function:\global:$funcName -Value `$_fn.ScriptBlock }
             & $funcName @args
 "@))
         if ($def.Aliases) {
