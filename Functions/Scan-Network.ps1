@@ -425,10 +425,29 @@ function Scan-Network {
         }
     }
     
+    function Get-HostUrl {
+        <#
+        .SYNOPSIS
+        Builds a web-UI URL for a host, choosing http/https from its open ports.
+        .DESCRIPTION
+        Reuses the OpenPorts comma-string already collected by Get-HostInfo.
+        Prefers https when 443/8443 are open, else http when 80/8080 are open.
+        Falls back to http:// when no port data exists (e.g. -QuickScan).
+        #>
+        param([Parameter(Mandatory)]$HostObj)
+
+        $ports = @()
+        if ($HostObj.OpenPorts) { $ports = ($HostObj.OpenPorts -split ',').Trim() }
+
+        if     ($ports -contains '443' -or $ports -contains '8443') { return "https://$($HostObj.IPAddress)" }
+        elseif ($ports -contains '80'  -or $ports -contains '8080') { return "http://$($HostObj.IPAddress)" }
+        else   { return "http://$($HostObj.IPAddress)" }
+    }
+
     # ══════════════════════════════════════════════════════════════════════════
     # Main Execution
     # ══════════════════════════════════════════════════════════════════════════
-    
+
     Write-Host "`n🔍 Network Scanner" -ForegroundColor DarkCyan
     Write-Host ("═" * 70) -ForegroundColor DarkCyan
     
@@ -733,8 +752,55 @@ function Scan-Network {
     Write-Host "    • & `$Global:CopyIPs    - Copy all IPs to clipboard" -ForegroundColor White
     Write-Host "    • & `$Global:CopyMACs   - Copy all MAC addresses to clipboard`n" -ForegroundColor White
     
-    # Open in GridView for easy filtering/export
-    Write-Host "🔎 Opening results in GridView (use Ctrl+C to copy selected rows)..." -ForegroundColor DarkCyan
-    
-    $results | Out-GridView -Title "Network Scan Results - $($selectedInterface.CIDR) | Found: $($results.Count) hosts | Scan time: $([math]::Round($scanDuration, 1))s"
+    # Open in GridView, then offer copy/open actions on the selected row(s).
+    # Out-GridView is read-only (no double-click/per-cell copy), so -PassThru returns
+    # the selected rows on OK and we act on them from the console. Closing the window
+    # (Cancel/X) returns nothing and exits the loop.
+    Write-Host "🔎 Opening results in GridView (filter, select row(s) + OK for copy/open actions; Ctrl+C copies whole rows)..." -ForegroundColor DarkCyan
+
+    while ($true) {
+        $selected = $results | Out-GridView -PassThru -Title "Network Scan Results - $($selectedInterface.CIDR) | Found: $($results.Count) hosts | Select row(s) + OK for actions"
+        if (-not $selected) { break }   # window closed / cancelled
+
+        Write-Host "`nSelected $($selected.Count) host(s):" -ForegroundColor DarkCyan
+        $selected | ForEach-Object { Write-Host "    • $($_.IPAddress)  $($_.Hostname)  $($_.MAC)" -ForegroundColor White }
+
+        Write-Host "`nActions:" -ForegroundColor Yellow
+        Write-Host "  [1] Copy MAC(s) to clipboard" -ForegroundColor White
+        Write-Host "  [2] Copy IP(s) to clipboard" -ForegroundColor White
+        Write-Host "  [3] Open web interface(s) in browser" -ForegroundColor White
+        Write-Host "  [B] Back to grid    [Q] Done" -ForegroundColor DarkGray
+        $action = Read-Host "Choose"
+
+        switch -Regex ($action) {
+            '^1$' {
+                $macs = $selected.MAC | Where-Object { $_ }
+                if ($macs) {
+                    $macs | Set-Clipboard
+                    Write-Host "✓ Copied $($macs.Count) MAC(s) to clipboard" -ForegroundColor Green
+                } else {
+                    Write-Host "⚠ No MAC addresses on the selected host(s)" -ForegroundColor Yellow
+                }
+            }
+            '^2$' {
+                $ipList = $selected.IPAddress | Where-Object { $_ }
+                $ipList | Set-Clipboard
+                Write-Host "✓ Copied $($ipList.Count) IP(s) to clipboard" -ForegroundColor Green
+            }
+            '^3$' {
+                if ($selected.Count -gt 5) {
+                    $ok = Read-Host "This opens $($selected.Count) browser tabs. Continue? (Y/N)"
+                    if ($ok -notmatch '^y') { continue }
+                }
+                foreach ($h in $selected) {
+                    $url = Get-HostUrl -HostObj $h
+                    Write-Host "🌐 Opening $url" -ForegroundColor Cyan
+                    Start-Process $url
+                }
+            }
+            '^[Bb]$' { continue }
+            '^[Qq]$' { break }
+            default  { Write-Host "Invalid choice." -ForegroundColor Red }
+        }
+    }
 }
