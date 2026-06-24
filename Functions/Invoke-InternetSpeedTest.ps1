@@ -13,7 +13,9 @@ function Invoke-InternetSpeedTest {
         Force re-download of Speedtest CLI even if already present
     
     .PARAMETER AcceptLicense
-        Automatically accept Speedtest license (skips prompt on first run)
+        Accept the Speedtest license/GDPR terms (defaults to $true). Required for every
+        non-interactive run, since output is captured (2>&1) and the CLI cannot prompt.
+        Suppress with -AcceptLicense:$false.
     
     .EXAMPLE
         Invoke-InternetSpeedTest
@@ -27,7 +29,7 @@ function Invoke-InternetSpeedTest {
     [CmdletBinding()]
     param(
         [switch]$Force,
-        [switch]$AcceptLicense
+        [switch]$AcceptLicense = $true
     )
     
     # ══════════════════════════════════════════════════════════════════════════
@@ -146,8 +148,13 @@ function Invoke-InternetSpeedTest {
             return
         }
         
-        # Parse JSON
-        $result = $jsonOutput | ConvertFrom-Json -ErrorAction Stop
+        # Parse JSON. On a first run the CLI records license acceptance and prints a
+        # banner to stderr; 2>&1 merges it ahead of the JSON, so isolate the JSON object
+        # (starts at the first '{') before converting.
+        $rawText = ($jsonOutput | Out-String)
+        $braceIdx = $rawText.IndexOf('{')
+        $jsonText = if ($braceIdx -ge 0) { $rawText.Substring($braceIdx) } else { $rawText }
+        $result = $jsonText | ConvertFrom-Json -ErrorAction Stop
         
     }
     catch {
