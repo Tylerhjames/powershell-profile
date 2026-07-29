@@ -256,7 +256,7 @@ function Test-EmailAuthentication {
                 $results.DMARC.Policy = $policy
                 
                 $policyDesc = switch ($policy) {
-                    'none'       { "MONITOR ONLY (no enforcement)"; 'Warn'; break }
+                    'none'       { "$global:CbitWarnGlyph MONITOR ONLY (no enforcement)"; 'Bad'; break }
                     'quarantine' { "QUARANTINE (suspicious mail to spam)"; ''; break }
                     'reject'     { "REJECT (blocks unauthorized mail)"; 'Good'; break }
                     default      { "UNKNOWN"; 'Bad' }
@@ -315,17 +315,20 @@ function Test-EmailAuthentication {
         Write-Info "Testing common DKIM selectors"
     }
     
-    $foundDKIM = $false
-    
+    # Check ALL selectors — paired keys (e.g. M365 selector1/selector2) must both
+    # exist or key rotation silently breaks when the provider flips to the
+    # missing selector. No early break.
+    $foundSelectors = @()
+
     foreach ($selector in $selectors) {
         try {
             $dkimName = "$selector._domainkey.$Domain"
             $dkimRecords = Get-SafeDNS -Name $dkimName -Type TXT
             $dkimRecord = $dkimRecords.Strings -join ""
-            
+
             if ($dkimRecord -match "v=DKIM1") {
                 Write-Success "DKIM found (selector: $selector)"
-                
+
                 # Truncate very long keys for display
                 $displayKey = if ($dkimRecord.Length -gt 100) {
                     "$($dkimRecord.Substring(0, 97))..."
@@ -333,15 +336,14 @@ function Test-EmailAuthentication {
                     $dkimRecord
                 }
                 Write-Color "    $displayKey" 'Detail'
-                
+
                 $results.DKIM.Found = $true
-                $results.DKIM.Selector = $selector
-                $results.DKIM.Record = $dkimRecord
-                
+                if (-not $results.DKIM.Record) { $results.DKIM.Record = $dkimRecord }
+
                 # Analyze key strength
                 if ($dkimRecord -match 'k=rsa') {
                     Write-Info "Key type: RSA"
-                    
+
                     # Estimate key size (rough estimate from base64 length)
                     if ($dkimRecord.Length -gt 500) {
                         Write-Success "Strong key (likely 2048+ bit)"
@@ -349,20 +351,42 @@ function Test-EmailAuthentication {
                         Write-Warning "Weak key (likely 1024 bit or less)"
                     }
                 }
-                
-                $foundDKIM = $true
-                break
+
+                $foundSelectors += $selector
             }
         }
         catch {
             # Selector not found, continue to next
         }
     }
-    
-    if (-not $foundDKIM) {
+
+    $results.DKIM.Selector = $foundSelectors -join ', '
+
+    if ($foundSelectors.Count -eq 0) {
         Write-Failure "DKIM record NOT found"
         Write-Info "Tested selectors: $($selectors -join ', ')"
         Write-Info "You may need to specify custom selectors with -DKIMSelectors"
+    }
+    else {
+        # Paired-selector completeness: M365 (selector1/selector2) and generic
+        # k1/k2 rotate between two keys — having only one is a latent failure.
+        foreach ($pair in @(@('selector1', 'selector2'), @('k1', 'k2'))) {
+            $inScope = @($pair | Where-Object { $selectors -contains $_ })
+            if ($inScope.Count -eq 2) {
+                $missing = @($pair | Where-Object { $foundSelectors -notcontains $_ })
+                if ($missing.Count -eq 1) {
+                    Write-Failure "DKIM selector pair incomplete: '$($missing[0])' not found"
+                    Write-Info "Both keys must resolve - mail will fail DKIM when the provider rotates to the missing selector"
+                }
+            }
+        }
+        # User-specified selectors: report any that didn't resolve
+        if ($DKIMSelectors) {
+            $notFound = @($DKIMSelectors | Where-Object { $foundSelectors -notcontains $_ })
+            if ($notFound.Count -gt 0) {
+                Write-Warning "Specified selector(s) not found: $($notFound -join ', ')"
+            }
+        }
     }
     
     # ══════════════════════════════════════════════════════════════════════════
@@ -396,12 +420,12 @@ function Test-EmailAuthentication {
             }
         }
         else {
-            Write-Failure "BIMI record NOT found"
+            Write-Warning "BIMI record not found (optional)"
             Write-Info "BIMI displays your brand logo in supported email clients"
         }
     }
     catch {
-        Write-Failure "BIMI lookup failed: $_"
+        Write-Warning "BIMI lookup failed: $_"
     }
     
     # ══════════════════════════════════════════════════════════════════════════
