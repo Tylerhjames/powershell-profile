@@ -19,7 +19,7 @@ $ErrorActionPreference = 'Stop'
 
 $script:Config = @{
     ProfileRepoUrl    = 'https://github.com/tylerhjames/powershell-profile.git'
-    ProfileRepoPath   = Join-Path $HOME 'Documents\Git\powershell-profile'
+    ProfileRepoPath   = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Git\powershell-profile'
     BootstrapUrl      = 'https://raw.githubusercontent.com/tylerhjames/powershell-profile/main/bootstrap.ps1'
     MinPowerShellVer  = [version]'7.0'
     CacheDir          = Join-Path $env:TEMP 'ps-bootstrap-cache'

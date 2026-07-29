@@ -1,0 +1,12 @@
+# Normalize line endings: store LF in repo, checkout CRLF on Windows
+* text=auto
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.psd1 text eol=crlf
+*.md text
+*.txt text
+*.log text
+
+# Binaries - never touch
+*.exe binary
+*.dll binary
