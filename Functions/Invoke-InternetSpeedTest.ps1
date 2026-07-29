@@ -7,7 +7,7 @@ function Invoke-InternetSpeedTest {
         Downloads (if needed) and runs the official Speedtest.net CLI.
         Results are parsed and displayed with performance ratings.
         
-        The CLI binary is cached in: ~/Documents/Git/powershell-profile/bin/
+        The CLI binary is cached in: C:\Git\powershell-profile\bin\
     
     .PARAMETER Force
         Force re-download of Speedtest CLI even if already present
@@ -38,7 +38,7 @@ function Invoke-InternetSpeedTest {
     
     # Derive bin path from script location for portability across workstations
     $binRoot = if ($PSScriptRoot) { Join-Path (Split-Path $PSScriptRoot -Parent) 'bin' }
-               else { Join-Path $HOME 'Documents\Git\powershell-profile\bin' }
+               else { 'C:\Git\powershell-profile\bin' }
     $speedtestExe = Join-Path $binRoot 'speedtest.exe'
     $downloadUrl = 'https://install.speedtest.net/app/cli/ookla-speedtest-1.2.0-win64.zip'
     

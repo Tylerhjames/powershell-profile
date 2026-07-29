@@ -8,7 +8,10 @@
 $ErrorActionPreference = 'SilentlyContinue'
 
 # ── Configuration ──
-$script:ProfileRepo = "$HOME\Documents\Git\powershell-profile"
+# Self-locating: resolves to wherever this file actually lives, so the repo
+# can move without editing this line. Loader dot-sources us, so $PSScriptRoot
+# is this script's own directory.
+$script:ProfileRepo = $PSScriptRoot
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Phase 1: Background Git Sync (non-blocking)

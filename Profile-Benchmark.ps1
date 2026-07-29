@@ -3,7 +3,7 @@
     -------------------------
     Run this from a FRESH PowerShell 7 window (not one that already loaded your profile):
 
-        pwsh -NoProfile -NoLogo -File "$HOME\Documents\Git\powershell-profile\Profile-Benchmark.ps1"
+        pwsh -NoProfile -NoLogo -File "C:\Git\powershell-profile\Profile-Benchmark.ps1"
 
     It measures each section of your Profile.ps1 independently so we can see
     exactly where the time goes. Results are saved to Profile-Benchmark-Results.txt
@@ -11,7 +11,8 @@
 #>
 
 $ErrorActionPreference = 'SilentlyContinue'
-$repo = "$HOME\Documents\Git\powershell-profile"
+# Self-locating: the repo is wherever this script lives
+$repo = $PSScriptRoot
 $results = [System.Collections.Generic.List[PSCustomObject]]::new()
 
 function Measure-Section {
