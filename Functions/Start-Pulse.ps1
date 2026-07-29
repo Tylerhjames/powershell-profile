@@ -47,18 +47,14 @@ function Start-Pulse {
         finally { $tcp.Close() }
     }
 
-    # ── ANSI support detection ──
-    $AnsiSupported = ($env:WT_SESSION) -or ($PSVersionTable.PSVersion.Major -ge 7) -or ($env:TERM_PROGRAM -eq "vscode")
-
+    # ── Themed output (Write-Color handles ANSI detection itself) ──
     function _Pulse_WriteSage {
         param([string]$Text)
-        if ($AnsiSupported) { Write-Host ("`e[38;2;119;129;92m" + $Text + "`e[0m") }
-        else { Write-Host $Text -ForegroundColor DarkCyan }
+        Write-Color $Text 'Header'
     }
     function _Pulse_WriteMeta {
         param([string]$Text)
-        if ($AnsiSupported) { Write-Host ("`e[38;2;120;120;120m" + $Text + "`e[0m") }
-        else { Write-Host $Text -ForegroundColor Gray }
+        Write-Color $Text 'Detail'
     }
 
     # ── Configuration defaults ──
@@ -94,7 +90,7 @@ function Start-Pulse {
                     _Pulse_WriteSage "`n[STEP 1] Target Host"
                     _Pulse_WriteMeta "  Example: 8.8.8.8 | gateway.client.com"
                     $UserInput = Read-Host "  >> Target"
-                    if ($UserInput -eq "exit") { Write-Host "Cancelled." -ForegroundColor Gray; $ErrorActionPreference = $prevEAP; return }
+                    if ($UserInput -eq "exit") { Write-Color "Cancelled." 'Detail'; $ErrorActionPreference = $prevEAP; return }
                     if ($UserInput -eq "b" -or $UserInput -eq "back") { continue }
                     if ($UserInput -match "^[a-zA-Z0-9._:\-]+$") { $Config.Target = $UserInput; $CurrentStep++ }
                     else { throw "Invalid Hostname/IP format." }
@@ -103,7 +99,7 @@ function Start-Pulse {
                     _Pulse_WriteSage "`n[STEP 2] Port Selection"
                     _Pulse_WriteMeta "  Example: 80,443 | 3389 | <Enter> for Ping (ICMP)"
                     $UserInput = Read-Host "  >> Port(s)"
-                    if ($UserInput -eq "exit") { Write-Host "Cancelled." -ForegroundColor Gray; $ErrorActionPreference = $prevEAP; return }
+                    if ($UserInput -eq "exit") { Write-Color "Cancelled." 'Detail'; $ErrorActionPreference = $prevEAP; return }
                     if ($UserInput -eq "b" -or $UserInput -eq "back") { $CurrentStep--; continue }
                     if ($UserInput -eq "") { $Config.Ports = @(); $CurrentStep++ }
                     elseif ($UserInput -match "^[\d,\s]+$") {
@@ -118,7 +114,7 @@ function Start-Pulse {
                     _Pulse_WriteSage "`n[STEP 3] Duration"
                     _Pulse_WriteMeta "  Example: 0.5 (30m) | 2 (2h) | 45m (Minutes)"
                     $UserInput = Read-Host "  >> Duration [Default: $($Config.DurationHrs)h]"
-                    if ($UserInput -eq "exit") { Write-Host "Cancelled." -ForegroundColor Gray; $ErrorActionPreference = $prevEAP; return }
+                    if ($UserInput -eq "exit") { Write-Color "Cancelled." 'Detail'; $ErrorActionPreference = $prevEAP; return }
                     if ($UserInput -eq "b" -or $UserInput -eq "back") { $CurrentStep--; continue }
                     if ($UserInput -eq "") { $CurrentStep++ }
                     elseif ($UserInput -match "^(\d*\.?\d+)m$") { $Config.DurationHrs = [double]$Matches[1] / 60; $CurrentStep++ }
@@ -129,7 +125,7 @@ function Start-Pulse {
                     _Pulse_WriteSage "`n[STEP 4] Check Interval"
                     _Pulse_WriteMeta "  Example: 5 (Fast) | 30 (Standard)"
                     $UserInput = Read-Host "  >> Seconds [Default: $($Config.Interval)]"
-                    if ($UserInput -eq "exit") { Write-Host "Cancelled." -ForegroundColor Gray; $ErrorActionPreference = $prevEAP; return }
+                    if ($UserInput -eq "exit") { Write-Color "Cancelled." 'Detail'; $ErrorActionPreference = $prevEAP; return }
                     if ($UserInput -eq "b" -or $UserInput -eq "back") { $CurrentStep--; continue }
                     if ($UserInput -eq "") { $CurrentStep++ }
                     elseif ($UserInput -match "^\d+$" -and [int]$UserInput -ge 1) { $Config.Interval = [int]$UserInput; $CurrentStep++ }
@@ -139,7 +135,7 @@ function Start-Pulse {
                     _Pulse_WriteSage "`n[STEP 5] Log Location"
                     _Pulse_WriteMeta "  Leave blank for Desktop"
                     $UserInput = Read-Host "  >> Path"
-                    if ($UserInput -eq "exit") { Write-Host "Cancelled." -ForegroundColor Gray; $ErrorActionPreference = $prevEAP; return }
+                    if ($UserInput -eq "exit") { Write-Color "Cancelled." 'Detail'; $ErrorActionPreference = $prevEAP; return }
                     if ($UserInput -eq "b" -or $UserInput -eq "back") { $CurrentStep--; continue }
                     if ($UserInput -ne "") { $Config.OutFolder = $UserInput.TrimEnd("\") }
                     if (-not (Test-Path $Config.OutFolder)) { New-Item -ItemType Directory -Path $Config.OutFolder -Force | Out-Null }
@@ -149,7 +145,7 @@ function Start-Pulse {
                     _Pulse_WriteSage "`n[STEP 6] Report Format"
                     _Pulse_WriteMeta "  1: .txt | 2: .csv | 3: Both"
                     $UserInput = Read-Host "  >> Choice (1-3) [Default: 3]"
-                    if ($UserInput -eq "exit") { Write-Host "Cancelled." -ForegroundColor Gray; $ErrorActionPreference = $prevEAP; return }
+                    if ($UserInput -eq "exit") { Write-Color "Cancelled." 'Detail'; $ErrorActionPreference = $prevEAP; return }
                     if ($UserInput -eq "b" -or $UserInput -eq "back") { $CurrentStep--; continue }
                     if ($UserInput -eq "") { $CurrentStep++ }
                     elseif ($UserInput -match "^[1-3]$") { $Config.LogType = [int]$UserInput; $CurrentStep++ }
@@ -157,7 +153,7 @@ function Start-Pulse {
                 }
             }
         } catch {
-            Write-Host "  ERROR: $_" -ForegroundColor Red
+            Write-Color "  ERROR: $_" 'Bad'
         }
     }
 
@@ -212,13 +208,13 @@ function Start-Pulse {
                 $S = $Stats["ICMP"]
                 if ($Success) { $S.Pass++; $S.LatencySum += $Latency; $S.LatencyCount++ } else { $S.Fail++ }
 
-                $Color = if ($Success) { "Green" } else { "Red" }
-                Write-Host "[$CheckTime] PING : $(if($Success){'SUCCESS'}else{'FAIL'}) ($($Latency)ms)" -ForegroundColor $Color
+                $Color = if ($Success) { 'Good' } else { 'Bad' }
+                Write-Color "[$CheckTime] PING : $(if($Success){'SUCCESS'}else{'FAIL'}) ($($Latency)ms)" $Color
 
                 try {
                     if ($Config.LogType -in 1,3) { "[$CheckTime] ICMP | $(if($Success){'SUCCESS'}else{'FAIL'}) | $($Latency)ms" | Out-File $TxtFile -Append -Encoding UTF8 }
                     if ($Config.LogType -in 2,3) { "$CheckTime,$($Config.Target),ICMP,$(if($Success){'SUCCESS'}else{'FAIL'}),$Latency,$PubIP" | Out-File $CsvFile -Append -Encoding UTF8 }
-                } catch { Write-Host "  [LOG WRITE ERROR] $_" -ForegroundColor Yellow }
+                } catch { Write-Color "  [LOG WRITE ERROR] $_" 'Warn' }
 
                 $CurrentState = $Success
                 if ($null -ne $LastState -and $CurrentState -ne $LastState) {
@@ -235,13 +231,13 @@ function Start-Pulse {
                     $S       = $Stats[$Key]
                     if ($Success) { $S.Pass++; $S.LatencySum += $Latency; $S.LatencyCount++ } else { $S.Fail++ }
 
-                    $Color = if ($Success) { "Green" } else { "Red" }
-                    Write-Host "[$CheckTime] Port $P : $(if($Success){'SUCCESS'}else{'FAIL'}) ($($Latency)ms)" -ForegroundColor $Color
+                    $Color = if ($Success) { 'Good' } else { 'Bad' }
+                    Write-Color "[$CheckTime] Port $P : $(if($Success){'SUCCESS'}else{'FAIL'}) ($($Latency)ms)" $Color
 
                     try {
                         if ($Config.LogType -in 1,3) { "[$CheckTime] Port $P | $(if($Success){'SUCCESS'}else{'FAIL'}) | $($Latency)ms" | Out-File $TxtFile -Append -Encoding UTF8 }
                         if ($Config.LogType -in 2,3) { "$CheckTime,$($Config.Target),Port_$P,$(if($Success){'SUCCESS'}else{'FAIL'}),$Latency,$PubIP" | Out-File $CsvFile -Append -Encoding UTF8 }
-                    } catch { Write-Host "  [LOG WRITE ERROR] $_" -ForegroundColor Yellow }
+                    } catch { Write-Color "  [LOG WRITE ERROR] $_" 'Warn' }
                 }
 
                 $CurrentState = (_Pulse_TestPort -Computer $Config.Target -Port $Config.Ports[0]).Success
@@ -275,7 +271,7 @@ function Start-Pulse {
         _Pulse_WriteSage $Summary
         try {
             if ($Config.LogType -in 1,3) { $Summary | Out-File $TxtFile -Append -Encoding UTF8 }
-        } catch { Write-Host "  [LOG WRITE ERROR] $_" -ForegroundColor Yellow }
+        } catch { Write-Color "  [LOG WRITE ERROR] $_" 'Warn' }
 
         # Restore error preference
         $ErrorActionPreference = $prevEAP

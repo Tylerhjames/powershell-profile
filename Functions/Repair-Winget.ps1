@@ -42,7 +42,7 @@ function Repair-Winget {
 
     # ── Tier 1: PATH repair ──
     if (Test-Path "$wingetUserDir\winget.exe") {
-        Write-Host '⚙ winget.exe found but not on PATH — repairing PATH...' -ForegroundColor Yellow
+        Write-Color '⚙ winget.exe found but not on PATH — repairing PATH...' 'Warn'
 
         # Session PATH (fixes this shell immediately)
         $env:Path = "$($env:Path.TrimEnd(';'));$wingetUserDir"
@@ -69,7 +69,7 @@ function Repair-Winget {
         }
 
         if (Test-WingetResolves) {
-            Write-Host '✓ winget repaired (PATH)' -ForegroundColor DarkGreen
+            Write-Color "$global:CbitCheck winget repaired (PATH)" 'Good'
             return $true
         }
     }
@@ -79,15 +79,15 @@ function Repair-Winget {
     # registration is per-user and is what creates the winget.exe alias.
     # Shelled to powershell.exe because the Appx module is unreliable under
     # PS 7 without the WinPS compatibility shim.
-    Write-Host '⚙ Re-registering App Installer for current user...' -ForegroundColor Yellow
+    Write-Color '⚙ Re-registering App Installer for current user...' 'Warn'
     & powershell.exe -NoProfile -NonInteractive -Command 'Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe -ErrorAction Stop' 2>$null
     if ($LASTEXITCODE -eq 0 -and (Test-WingetResolves)) {
-        Write-Host '✓ winget repaired (package re-registered)' -ForegroundColor DarkGreen
+        Write-Color "$global:CbitCheck winget repaired (package re-registered)" 'Good'
         return $true
     }
 
     # ── Tier 3: full repair via Microsoft.WinGet.Client (MS-documented path) ──
-    Write-Host '⚙ winget missing — running full repair (Microsoft.WinGet.Client / Repair-WinGetPackageManager). This downloads from PSGallery and may take a minute...' -ForegroundColor Yellow
+    Write-Color '⚙ winget missing — running full repair (Microsoft.WinGet.Client / Repair-WinGetPackageManager). This downloads from PSGallery and may take a minute...' 'Warn'
     try {
         if (-not (Get-Module -ListAvailable Microsoft.WinGet.Client)) {
             if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
@@ -112,7 +112,7 @@ function Repair-Winget {
     }
 
     if (Test-WingetResolves) {
-        Write-Host '✓ winget repaired (full reinstall)' -ForegroundColor DarkGreen
+        Write-Color "$global:CbitCheck winget repaired (full reinstall)" 'Good'
         return $true
     }
 

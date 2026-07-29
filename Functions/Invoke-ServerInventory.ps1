@@ -29,7 +29,7 @@ function Invoke-ServerInventory {
     # ── Verify we're on a server OS (warn but don't block) ──
     $osCaption = (Get-CimInstance Win32_OperatingSystem).Caption
     if ($osCaption -notmatch 'Server') {
-        Write-Host "⚠ This appears to be a workstation OS ($osCaption). Some sections may be incomplete." -ForegroundColor Yellow
+        Write-Color "$global:CbitWarnGlyph This appears to be a workstation OS ($osCaption). Some sections may be incomplete." 'Warn'
     }
 
     if (!(Test-Path $OutputPath)) { New-Item -Path $OutputPath -ItemType Directory -Force | Out-Null }
@@ -47,7 +47,7 @@ function Invoke-ServerInventory {
     $outFile = Join-Path $OutputPath "$baseName.txt"
     $htmlFile = Join-Path $OutputPath "$baseName.html"
 
-    Write-Host "Collecting inventory for $($env:COMPUTERNAME) ($machineType)..." -ForegroundColor Cyan
+    Write-Color "Collecting inventory for $($env:COMPUTERNAME) ($machineType)..." 'Header'
 
     # ════════════════════════════════════════════════════════════════════════
     # COLLECT DATA
@@ -733,9 +733,9 @@ $tasksSectionHtml
 
     $html | Out-File -FilePath $htmlFile -Encoding UTF8
 
-    Write-Host "✅ Inventory complete" -ForegroundColor Green
-    Write-Host "   Text: $outFile" -ForegroundColor Gray
-    Write-Host "   HTML: $htmlFile" -ForegroundColor Gray
+    Write-Color "$global:CbitCheck Inventory complete" 'Good'
+    Write-Color "   Text: $outFile" 'Detail'
+    Write-Color "   HTML: $htmlFile" 'Detail'
 }
 Set-Alias -Name inventory -Value Invoke-ServerInventory -Scope Global
 Set-Alias -Name serverinv -Value Invoke-ServerInventory -Scope Global

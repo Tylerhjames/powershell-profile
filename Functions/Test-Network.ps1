@@ -41,21 +41,21 @@ function Test-Network {
     # ══════════════════════════════════════════════════════════════════════════
     
     function Show-TestMenu {
-        Write-Host "`n═══════════════════════════════════════" -ForegroundColor Cyan
-        Write-Host "    Network Testing Suite" -ForegroundColor Cyan
-        Write-Host "═══════════════════════════════════════`n" -ForegroundColor Cyan
-        
-        Write-Host "Select test mode:`n" -ForegroundColor Yellow
-        Write-Host "  [1] LAN Throughput Test" -ForegroundColor White
-        Write-Host "      └─ Requires local iperf3 server" -ForegroundColor Gray
+        Write-Color "`n═══════════════════════════════════════" 'Header'
+        Write-Color "    Network Testing Suite" 'Header'
+        Write-Color "═══════════════════════════════════════`n" 'Header'
+
+        Write-Color "Select test mode:`n" 'Header'
+        Write-Color "  [1] LAN Throughput Test"
+        Write-Color "      └─ Requires local iperf3 server" 'Detail'
         Write-Host ""
-        Write-Host "  [2] WAN Throughput Test" -ForegroundColor White
-        Write-Host "      └─ Tests against public iperf servers" -ForegroundColor Gray
+        Write-Color "  [2] WAN Throughput Test"
+        Write-Color "      └─ Tests against public iperf servers" 'Detail'
         Write-Host ""
-        Write-Host "  [3] Internet Speed Test" -ForegroundColor White
-        Write-Host "      └─ Uses Speedtest.net CLI (Ookla)" -ForegroundColor Gray
+        Write-Color "  [3] Internet Speed Test"
+        Write-Color "      └─ Uses Speedtest.net CLI (Ookla)" 'Detail'
         Write-Host ""
-        Write-Host "  [Q] Quit`n" -ForegroundColor DarkGray
+        Write-Color "  [Q] Quit`n" 'Detail'
         
         do {
             $choice = Read-Host "Choose an option"
@@ -66,7 +66,7 @@ function Test-Network {
                 '3' { 'Internet'; break }
                 { $_ -match '^[Qq]$' } { $null; break }
                 default { 
-                    Write-Host "Invalid choice. Please try again." -ForegroundColor Red
+                    Write-Color "Invalid choice. Please try again." 'Bad'
                     'retry'
                 }
             }
@@ -90,7 +90,7 @@ function Test-Network {
         param([string]$TestMode)
         
         if ($Target) {
-            Write-Host "`n✓ Using target: $Target" -ForegroundColor Green
+            Write-Color "`n$($global:CbitCheck) Using target: $Target" 'Good'
             return $Target
         }
         
@@ -103,14 +103,14 @@ function Test-Network {
         # WAN mode - show public servers
         $servers = Get-PublicServers
         
-        Write-Host "`n═══════════════════════════════════════" -ForegroundColor Cyan
-        Write-Host "  Public iperf3 Test Servers" -ForegroundColor Cyan
-        Write-Host "═══════════════════════════════════════`n" -ForegroundColor Cyan
-        
+        Write-Color "`n═══════════════════════════════════════" 'Header'
+        Write-Color "  Public iperf3 Test Servers" 'Header'
+        Write-Color "═══════════════════════════════════════`n" 'Header'
+
         for ($i = 0; $i -lt $servers.Count; $i++) {
             $marker = if ($servers[$i].Recommended) { "⭐ Recommended" } else { "" }
-            Write-Host "  [$($i+1)] $($servers[$i].Host)" -ForegroundColor White
-            Write-Host "      └─ $($servers[$i].Location) $marker" -ForegroundColor Gray
+            Write-Color "  [$($i+1)] $($servers[$i].Host)"
+            Write-Color "      └─ $($servers[$i].Location) $marker" 'Detail'
         }
         
         do {
@@ -119,14 +119,14 @@ function Test-Network {
             if ($choice -match "^\d+$" -and [int]$choice -ge 1 -and [int]$choice -le $servers.Count) {
                 return $servers[[int]$choice - 1].Host
             }
-            Write-Host "Invalid choice. Please try again." -ForegroundColor Red
+            Write-Color "Invalid choice. Please try again." 'Bad'
         } while ($true)
     }
     
     function Test-Latency {
         param([string]$Target)
         
-        Write-Host "`n[1/2] Testing latency..." -ForegroundColor Yellow
+        Write-Color "`n[1/2] Testing latency..." 'Header'
         
         try {
             $pingResults = Test-Connection -ComputerName $Target -Count 4 -ErrorAction Stop
@@ -139,11 +139,11 @@ function Test-Network {
                 Success = $true
             }
             
-            Write-Host "  ✓ Latency: $($result.Average)ms (min: $($result.Min)ms, max: $($result.Max)ms)" -ForegroundColor Green
+            Write-Color "  $($global:CbitCheck) Latency: $($result.Average)ms (min: $($result.Min)ms, max: $($result.Max)ms)" 'Good'
             return $result
         }
         catch {
-            Write-Host "  ⚠ Latency test failed (ICMP may be blocked)" -ForegroundColor Yellow
+            Write-Color "  $($global:CbitWarnGlyph) Latency test failed (ICMP may be blocked)" 'Warn'
             return @{ Average = 'N/A'; Success = $false }
         }
     }
@@ -155,7 +155,7 @@ function Test-Network {
             [int]$Duration = 5
         )
         
-        Write-Host "`n[2/2] Testing TCP throughput ($Duration seconds)..." -ForegroundColor Yellow
+        Write-Color "`n[2/2] Testing TCP throughput ($Duration seconds)..." 'Header'
         
         $client = New-Object System.Net.Sockets.TcpClient
         
@@ -169,13 +169,13 @@ function Test-Network {
             }
             
             $client.EndConnect($asyncResult)
-            Write-Host "  ✓ Connected to $Target`:$Port" -ForegroundColor Green
+            Write-Color "  $($global:CbitCheck) Connected to $Target`:$Port" 'Good'
             
         }
         catch {
-            Write-Host "  ✗ Failed to connect to $Target`:$Port" -ForegroundColor Red
-            Write-Host "    Ensure iperf3 server is running:" -ForegroundColor Gray
-            Write-Host "      iperf3 -s" -ForegroundColor White
+            Write-Color "  $($global:CbitCross) Failed to connect to $Target`:$Port" 'Bad'
+            Write-Color "    Ensure iperf3 server is running:" 'Detail'
+            Write-Color "      iperf3 -s" 'Header'
             $client.Dispose()
             return $null
         }
@@ -194,7 +194,7 @@ function Test-Network {
         $totalBytes = 0
         $lastUpdate = 0
         
-        Write-Host "  ⏱ Testing..." -ForegroundColor Gray -NoNewline
+        Write-Color "  ⏱ Testing..." 'Detail' -NoNewline
         
         try {
             while ($stopwatch.Elapsed.TotalSeconds -lt $Duration) {
@@ -203,14 +203,14 @@ function Test-Network {
                 
                 # Progress indicator every 0.5 seconds
                 if ($stopwatch.Elapsed.TotalSeconds - $lastUpdate -ge 0.5) {
-                    Write-Host "." -ForegroundColor Gray -NoNewline
+                    Write-Color "." 'Detail' -NoNewline
                     $lastUpdate = $stopwatch.Elapsed.TotalSeconds
                 }
             }
-            Write-Host " Done!" -ForegroundColor Green
+            Write-Color " Done!" 'Good'
         }
         catch {
-            Write-Host " Error!" -ForegroundColor Red
+            Write-Color " Error!" 'Bad'
             Write-Warning "Stream interrupted: $_"
         }
         finally {
@@ -241,26 +241,26 @@ function Test-Network {
             [string]$TestType
         )
         
-        Write-Host "`n═══════════════════════════════════════" -ForegroundColor Cyan
-        Write-Host "  Test Results" -ForegroundColor Cyan
-        Write-Host "═══════════════════════════════════════`n" -ForegroundColor Cyan
-        
-        Write-Host "Target:      $Target" -ForegroundColor White
-        Write-Host "Test Type:   $TestType" -ForegroundColor White
-        
+        Write-Color "`n═══════════════════════════════════════" 'Header'
+        Write-Color "  Test Results" 'Header'
+        Write-Color "═══════════════════════════════════════`n" 'Header'
+
+        Write-Color "Target:      $Target"
+        Write-Color "Test Type:   $TestType"
+
         if ($Latency.Success) {
-            Write-Host "Latency:     $($Latency.Average)ms (min: $($Latency.Min)ms, max: $($Latency.Max)ms)" -ForegroundColor White
+            Write-Color "Latency:     $($Latency.Average)ms (min: $($Latency.Min)ms, max: $($Latency.Max)ms)"
         } else {
-            Write-Host "Latency:     N/A" -ForegroundColor Gray
+            Write-Color "Latency:     N/A" 'Detail'
         }
-        
+
         if ($Throughput) {
-            Write-Host "Throughput:  $($Throughput.Mbps) Mbps" -ForegroundColor White
-            Write-Host "Data Sent:   $($Throughput.MBytes) MB in $($Throughput.Duration)s`n" -ForegroundColor White
-            
+            Write-Color "Throughput:  $($Throughput.Mbps) Mbps"
+            Write-Color "Data Sent:   $($Throughput.MBytes) MB in $($Throughput.Duration)s`n"
+
             # Performance rating
             $rating = Get-PerformanceRating -Mbps $Throughput.Mbps -Target $Target -TestType $TestType
-            Write-Host $rating.Message -ForegroundColor $rating.Color
+            Write-Color $rating.Message $rating.Color
             Write-Host ""
         }
     }
@@ -282,26 +282,26 @@ function Test-Network {
         if ($TestType -eq 'LAN' -or $isPrivate) {
             # LAN performance ratings
             if ($Mbps -ge 900) {
-                return @{ Message = "🚀 Excellent - Near gigabit speeds!"; Color = 'Green' }
+                return @{ Message = "$($global:CbitCheck) Excellent - Near gigabit speeds!"; Color = 'Good' }
             } elseif ($Mbps -ge 700) {
-                return @{ Message = "✅ Great - Good LAN performance"; Color = 'Green' }
+                return @{ Message = "$($global:CbitCheck) Great - Good LAN performance"; Color = 'Good' }
             } elseif ($Mbps -ge 300) {
-                return @{ Message = "⚠️  Fair - Possible bottleneck (check NIC/switch/cables)"; Color = 'Yellow' }
+                return @{ Message = "$($global:CbitWarnGlyph)  Fair - Possible bottleneck (check NIC/switch/cables)"; Color = 'Warn' }
             } else {
-                return @{ Message = "❌ Poor - Significant LAN bottleneck detected"; Color = 'Red' }
+                return @{ Message = "$($global:CbitCross) Poor - Significant LAN bottleneck detected"; Color = 'Bad' }
             }
         } else {
             # WAN performance ratings
             if ($Mbps -ge 500) {
-                return @{ Message = "🚀 Excellent - Premium connection speeds"; Color = 'Green' }
+                return @{ Message = "$($global:CbitCheck) Excellent - Premium connection speeds"; Color = 'Good' }
             } elseif ($Mbps -ge 200) {
-                return @{ Message = "✅ Great - Above-average WAN performance"; Color = 'Green' }
+                return @{ Message = "$($global:CbitCheck) Great - Above-average WAN performance"; Color = 'Good' }
             } elseif ($Mbps -ge 100) {
-                return @{ Message = "✔️  Good - Typical ISP speeds"; Color = 'Cyan' }
+                return @{ Message = "$($global:CbitCheck)  Good - Typical ISP speeds"; Color = 'Good' }
             } elseif ($Mbps -ge 50) {
-                return @{ Message = "⚠️  Fair - Below typical broadband speeds"; Color = 'Yellow' }
+                return @{ Message = "$($global:CbitWarnGlyph)  Fair - Below typical broadband speeds"; Color = 'Warn' }
             } else {
-                return @{ Message = "❌ Poor - Possible throttling or congestion"; Color = 'Red' }
+                return @{ Message = "$($global:CbitCross) Poor - Possible throttling or congestion"; Color = 'Bad' }
             }
         }
     }
@@ -314,7 +314,7 @@ function Test-Network {
     if ($Mode -eq 'Interactive') {
         $selectedMode = Show-TestMenu
         if (-not $selectedMode) {
-            Write-Host "`nTest cancelled.`n" -ForegroundColor Gray
+            Write-Color "`nTest cancelled.`n" 'Detail'
             return
         }
         $Mode = $selectedMode
@@ -325,8 +325,8 @@ function Test-Network {
         if (Get-Command Invoke-InternetSpeedTest -ErrorAction SilentlyContinue) {
             Invoke-InternetSpeedTest
         } else {
-            Write-Host "❌ Invoke-InternetSpeedTest function not found" -ForegroundColor Red
-            Write-Host "   Ensure Invoke-InternetSpeedTest.ps1 is loaded" -ForegroundColor Yellow
+            Write-Color "$($global:CbitCross) Invoke-InternetSpeedTest function not found" 'Bad'
+            Write-Color "   Ensure Invoke-InternetSpeedTest.ps1 is loaded" 'Warn'
         }
         return
     }
@@ -334,13 +334,13 @@ function Test-Network {
     # Get target server
     $targetHost = Select-TargetServer -TestMode $Mode
     if (-not $targetHost) {
-        Write-Host "`nTest cancelled.`n" -ForegroundColor Gray
+        Write-Color "`nTest cancelled.`n" 'Detail'
         return
     }
     
-    Write-Host "`n═══════════════════════════════════════" -ForegroundColor Cyan
-    Write-Host "  Starting $Mode Test" -ForegroundColor Cyan
-    Write-Host "═══════════════════════════════════════" -ForegroundColor Cyan
+    Write-Color "`n═══════════════════════════════════════" 'Header'
+    Write-Color "  Starting $Mode Test" 'Header'
+    Write-Color "═══════════════════════════════════════" 'Header'
     
     # Run tests
     $latency = Test-Latency -Target $targetHost
@@ -350,7 +350,7 @@ function Test-Network {
     if ($throughput) {
         Show-Results -Target $targetHost -Latency $latency -Throughput $throughput -TestType $Mode
     } else {
-        Write-Host "`n❌ Throughput test failed. Check server connectivity.`n" -ForegroundColor Red
+        Write-Color "`n$($global:CbitCross) Throughput test failed. Check server connectivity.`n" 'Bad'
     }
 }
 

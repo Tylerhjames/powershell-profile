@@ -13,24 +13,24 @@ function FlushMe {
                 ($null -ne $env:CLIENTNAME -and $env:CLIENTNAME -ne '' -and $env:CLIENTNAME -ne $env:COMPUTERNAME)
 
     if ($isRemote) {
-        Write-Host "`n⚠ You are in a remote session — renewing DHCP may disconnect you!" -ForegroundColor Yellow
+        Write-Color "`n$global:CbitWarnGlyph You are in a remote session — renewing DHCP may disconnect you!" 'Warn'
         $choice = Read-Host "Type YES to continue"
         if ($choice -notmatch '^yes$') {
-            Write-Host "Cancelled." -ForegroundColor Gray
+            Write-Color "Cancelled." 'Detail'
             return
         }
     }
 
-    Write-Host "Flushing DNS cache..." -ForegroundColor Cyan
+    Write-Color "Flushing DNS cache..." 'Detail'
     ipconfig /flushdns | Out-Null
 
-    Write-Host "Releasing IP..." -ForegroundColor Cyan
+    Write-Color "Releasing IP..." 'Detail'
     ipconfig /release | Out-Null
 
-    Write-Host "Renewing IP..." -ForegroundColor Cyan
+    Write-Color "Renewing IP..." 'Detail'
     ipconfig /renew | Out-Null
 
-    Write-Host "Network renewed" -ForegroundColor Green
+    Write-Color "Network renewed" 'Good'
     ipconfig | Select-String 'IPv4|Subnet|Gateway'
 }
 

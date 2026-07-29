@@ -41,7 +41,7 @@ function Show-TechMenu {
                 } elseif (Get-Command Invoke-NetTest -ErrorAction SilentlyContinue) {
                     Invoke-NetTest
                 } else {
-                    Write-Host "❌ Test-Network function not found. Try: rpl" -ForegroundColor Red
+                    Write-Color "$global:CbitCross Test-Network function not found. Try: rpl" 'Bad'
                 }
             }
             Icon        = "🌐"
@@ -72,7 +72,7 @@ function Show-TechMenu {
                     } elseif (Get-Command Test-EmailDNS -ErrorAction SilentlyContinue) {
                         Test-EmailDNS -Domain $domain
                     } else {
-                        Write-Host "❌ Email auth function not found. Try: rpl" -ForegroundColor Red
+                        Write-Color "$global:CbitCross Email auth function not found. Try: rpl" 'Bad'
                     }
                 }
             }
@@ -85,7 +85,7 @@ function Show-TechMenu {
                 if (Get-Command Scan-Network -ErrorAction SilentlyContinue) {
                     Scan-Network
                 } else {
-                    Write-Host "❌ Scan-Network function not found. Try: rpl" -ForegroundColor Red
+                    Write-Color "$global:CbitCross Scan-Network function not found. Try: rpl" 'Bad'
                 }
             }
             Icon        = "📡"
@@ -97,7 +97,7 @@ function Show-TechMenu {
                 if (Get-Command Invoke-InternetSpeedTest -ErrorAction SilentlyContinue) {
                     Invoke-InternetSpeedTest
                 } else {
-                    Write-Host "❌ Speedtest function not found. Try: rpl" -ForegroundColor Red
+                    Write-Color "$global:CbitCross Speedtest function not found. Try: rpl" 'Bad'
                 }
             }
             Icon        = "⚡"
@@ -121,7 +121,7 @@ function Show-TechMenu {
                 if (Get-Command Get-BitLockerInformation -ErrorAction SilentlyContinue) {
                     Get-BitLockerInformation
                 } else {
-                    Write-Host "❌ Get-BitLockerInformation function not found. Try: rpl" -ForegroundColor Red
+                    Write-Color "$global:CbitCross Get-BitLockerInformation function not found. Try: rpl" 'Bad'
                 }
             }
             Icon        = "🔒"
@@ -133,7 +133,7 @@ function Show-TechMenu {
                 if (Get-Command Start-Pulse -ErrorAction SilentlyContinue) {
                     Start-Pulse
                 } else {
-                    Write-Host "❌ Start-Pulse function not found. Try: rpl" -ForegroundColor Red
+                    Write-Color "$global:CbitCross Start-Pulse function not found. Try: rpl" 'Bad'
                 }
             }
             Icon        = "💓"
@@ -145,7 +145,7 @@ function Show-TechMenu {
                 if (Get-Command Invoke-ServerInventory -ErrorAction SilentlyContinue) {
                     Invoke-ServerInventory
                 } else {
-                    Write-Host "❌ Invoke-ServerInventory function not found. Try: rpl" -ForegroundColor Red
+                    Write-Color "$global:CbitCross Invoke-ServerInventory function not found. Try: rpl" 'Bad'
                 }
             }
             Icon        = "📋"
@@ -205,20 +205,20 @@ function Show-TechMenu {
         $paddedTitle = (" " * $padding) + $titleText
 
         Write-Host ""
-        Write-Host ("=" * $boxWidth) -ForegroundColor DarkGreen
-        Write-Host $paddedTitle -ForegroundColor DarkGreen
-        Write-Host ("=" * $boxWidth) -ForegroundColor DarkGreen
+        Write-Color ("=" * $boxWidth) 'Header'
+        Write-Color $paddedTitle 'Header'
+        Write-Color ("=" * $boxWidth) 'Header'
         Write-Host ""
 
-        Write-Host "  Use " -NoNewline -ForegroundColor Gray
-        Write-Host "arrows" -NoNewline -ForegroundColor Yellow
-        Write-Host " or " -NoNewline -ForegroundColor Gray
-        Write-Host "letter keys" -NoNewline -ForegroundColor Yellow
-        Write-Host " to navigate, " -NoNewline -ForegroundColor Gray
-        Write-Host "Enter" -NoNewline -ForegroundColor Yellow
-        Write-Host " to select, " -NoNewline -ForegroundColor Gray
-        Write-Host "Q" -NoNewline -ForegroundColor Yellow
-        Write-Host " to quit" -ForegroundColor Gray
+        Write-Color "  Use " 'Detail' -NoNewline
+        Write-Color "arrows" 'Warn' -NoNewline
+        Write-Color " or " 'Detail' -NoNewline
+        Write-Color "letter keys" 'Warn' -NoNewline
+        Write-Color " to navigate, " 'Detail' -NoNewline
+        Write-Color "Enter" 'Warn' -NoNewline
+        Write-Color " to select, " 'Detail' -NoNewline
+        Write-Color "Q" 'Warn' -NoNewline
+        Write-Color " to quit" 'Detail'
         Write-Host ""
 
         $rows = [math]::Ceiling($Items.Count / $ColumnCount)
@@ -236,12 +236,14 @@ function Show-TechMenu {
                     $displayText = "  $($item.Icon) [$letter] $($item.Name)"
 
                     if ($isSelected) {
-                        Write-Host " > " -NoNewline -ForegroundColor Yellow
-                        Write-Host $displayText.PadRight($columnWidth - 3) -NoNewline -BackgroundColor DarkGray -ForegroundColor White
+                        Write-Color " > " 'Warn' -NoNewline
+                        Write-Host $displayText.PadRight($columnWidth - 3) -NoNewline -BackgroundColor DarkGray -ForegroundColor Gray
                     }
                     else {
                         Write-Host "   " -NoNewline
-                        Write-Host $displayText.PadRight($columnWidth - 3) -NoNewline -ForegroundColor DarkGreen
+                        Write-Color "  $($item.Icon) " -NoNewline
+                        Write-Color "[$letter]" 'Warn' -NoNewline
+                        Write-Color " $($item.Name)".PadRight(($columnWidth - 3) - "  $($item.Icon) [$letter]".Length) -NoNewline
                     }
                 }
                 else {
@@ -257,7 +259,7 @@ function Show-TechMenu {
 
                 if ($index -eq $SelectedIndex -and $index -lt $Items.Count) {
                     $descText = "      -- $($Items[$index].Description)"
-                    Write-Host $descText.PadRight($boxWidth) -ForegroundColor DarkGray
+                    Write-Color $descText.PadRight($boxWidth) 'Detail'
                     $descWritten = $true
                 }
             }
@@ -269,10 +271,10 @@ function Show-TechMenu {
         }
 
         Write-Host ""
-        Write-Host ("─" * $boxWidth) -ForegroundColor DarkGray
+        Write-Color ("─" * $boxWidth) 'Detail'
         $letter = $script:LetterKeys[$SelectedIndex]
-        Write-Host "  Selected: $($Items[$SelectedIndex].Icon) [$letter] $($Items[$SelectedIndex].Name)".PadRight($boxWidth) -ForegroundColor Yellow
-        Write-Host ("─" * $boxWidth) -ForegroundColor DarkGray
+        Write-Color "  Selected: $($Items[$SelectedIndex].Icon) [$letter] $($Items[$SelectedIndex].Name)".PadRight($boxWidth) 'Warn'
+        Write-Color ("─" * $boxWidth) 'Detail'
     }
     
     # ══════════════════════════════════════════════════════════════════════════
@@ -295,20 +297,20 @@ function Show-TechMenu {
 
         Clear-Host
         Write-Host ""
-        Write-Host ("=" * 63) -ForegroundColor DarkGreen
-        Write-Host "  Executing: $($Item.Icon) $($Item.Name)" -ForegroundColor DarkGreen
-        Write-Host ("=" * 63) -ForegroundColor DarkGreen
+        Write-Color ("=" * 63) 'Header'
+        Write-Color "  Executing: $($Item.Icon) $($Item.Name)" 'Header'
+        Write-Color ("=" * 63) 'Header'
         Write-Host ""
 
         try {
             & $Item.Command
         } catch {
-            Write-Host "`nError: $_" -ForegroundColor Red
+            Write-Color "`nError: $_" 'Bad'
         }
 
         Write-Host ""
-        Write-Host ("─" * 63) -ForegroundColor DarkGray
-        Write-Host "Press Enter to return to menu..." -ForegroundColor Gray
+        Write-Color ("─" * 63) 'Detail'
+        Write-Color "Press Enter to return to menu..." 'Detail'
         Read-Host
     }
 
@@ -359,13 +361,13 @@ function Show-TechMenu {
             'Escape' {
                 $running = $false
                 Clear-Host
-                Write-Host "`nExiting Technician Toolkit`n" -ForegroundColor Green
+                Write-Color "`nExiting Technician Toolkit`n" 'Good'
             }
 
             'Q' {
                 $running = $false
                 Clear-Host
-                Write-Host "`nExiting Technician Toolkit`n" -ForegroundColor Green
+                Write-Color "`nExiting Technician Toolkit`n" 'Good'
             }
 
             default {

@@ -88,13 +88,13 @@ function Scan-Network {
         #>
         
         try {
-            Write-Host "    🗑️  Clearing ARP cache..." -ForegroundColor DarkGray
+            Write-Color "    🗑️  Clearing ARP cache..." 'Detail'
             
             # Windows command to clear ARP cache
             $result = netsh interface ip delete arpcache 2>&1
             
             if ($LASTEXITCODE -eq 0) {
-                Write-Host "    ✓ ARP cache cleared" -ForegroundColor DarkGreen
+                Write-Color "    $global:CbitCheck ARP cache cleared" 'Good'
                 return $true
             } else {
                 Write-Warning "Failed to clear ARP cache (may need admin rights)"
@@ -120,7 +120,7 @@ function Scan-Network {
         $loadStart = Get-Date
         
         try {
-            Write-Host "    📖 Loading OUI database from: $FilePath" -ForegroundColor DarkGray
+            Write-Color "    📖 Loading OUI database from: $FilePath" 'Detail'
             
             if (-not (Test-Path $FilePath)) {
                 throw "OUI file not found: $FilePath"
@@ -138,7 +138,7 @@ function Scan-Network {
             }
             
             $loadTime = ((Get-Date) - $loadStart).TotalSeconds
-            Write-Host "    ✓ Loaded $($ouiHash.Count) OUI entries in $([math]::Round($loadTime, 2))s" -ForegroundColor DarkGreen
+            Write-Color "    $global:CbitCheck Loaded $($ouiHash.Count) OUI entries in $([math]::Round($loadTime, 2))s" 'Good'
             
             return $ouiHash
         } catch {
@@ -199,22 +199,22 @@ function Scan-Network {
         
         # Check for /32 (VPN point-to-point connection)
         if ($PrefixLength -eq 32) {
-            Write-Host "`n⚠️  VPN Point-to-Point Connection Detected" -ForegroundColor Yellow
-            Write-Host ("═" * 70) -ForegroundColor Yellow
-            Write-Host "`nThis interface has a /32 subnet mask, which means:" -ForegroundColor White
-            Write-Host "  • It's a single host address (no network range)" -ForegroundColor DarkGray
-            Write-Host "  • Typically used for VPN client endpoints" -ForegroundColor DarkGray
-            Write-Host "  • There are no other local hosts to scan" -ForegroundColor DarkGray
-            
-            Write-Host "`n💡 Options:" -ForegroundColor Cyan
-            Write-Host "  1. Scan a different network interface (if available)" -ForegroundColor White
-            Write-Host "  2. If you want to scan the remote VPN network:" -ForegroundColor White
-            Write-Host "     • You'll need the actual remote subnet (e.g., 10.0.0.0/24)" -ForegroundColor DarkGray
-            Write-Host "     • Contact your network admin for the remote network range" -ForegroundColor DarkGray
-            Write-Host "  3. Single host scan:" -ForegroundColor White
-            Write-Host "     • Press 'S' to scan just this host ($IP)" -ForegroundColor DarkGray
-            
-            Write-Host "`nPress Enter to return to interface selection..." -ForegroundColor Gray
+            Write-Color "`n$global:CbitWarnGlyph  VPN Point-to-Point Connection Detected" 'Warn'
+            Write-Color ("═" * 70) 'Detail'
+            Write-Color "`nThis interface has a /32 subnet mask, which means:"
+            Write-Color "  • It's a single host address (no network range)" 'Detail'
+            Write-Color "  • Typically used for VPN client endpoints" 'Detail'
+            Write-Color "  • There are no other local hosts to scan" 'Detail'
+
+            Write-Color "`n💡 Options:" 'Header'
+            Write-Color "  1. Scan a different network interface (if available)"
+            Write-Color "  2. If you want to scan the remote VPN network:"
+            Write-Color "     • You'll need the actual remote subnet (e.g., 10.0.0.0/24)" 'Detail'
+            Write-Color "     • Contact your network admin for the remote network range" 'Detail'
+            Write-Color "  3. Single host scan:"
+            Write-Color "     • Press 'S' to scan just this host ($IP)" 'Detail'
+
+            Write-Color "`nPress Enter to return to interface selection..." 'Detail'
             $choice = Read-Host
             
             if ($choice -eq 'S' -or $choice -eq 's') {
@@ -448,19 +448,19 @@ function Scan-Network {
     # Main Execution
     # ══════════════════════════════════════════════════════════════════════════
 
-    Write-Host "`n🔍 Network Scanner" -ForegroundColor DarkCyan
-    Write-Host ("═" * 70) -ForegroundColor DarkCyan
+    Write-Color "`n🔍 Network Scanner" 'Header'
+    Write-Color ("═" * 70) 'Detail'
     
     # Apply port presets if specified (overrides -Ports parameter)
     if ($Preset) {
         switch ($Preset) {
             'Quick' {
                 $Ports = @(22, 80, 443, 445, 1433, 3306, 3389, 8080)
-                Write-Host "`n📋 Using 'Quick' preset (8 ports)" -ForegroundColor Cyan
+                Write-Color "`n📋 Using 'Quick' preset (8 ports)" 'Detail'
             }
             'Standard' {
                 $Ports = @(22, 80, 443, 445, 139, 1433, 1434, 3306, 3389, 5900, 8080, 9100, 50000)
-                Write-Host "`n📋 Using 'Standard' preset (13 ports)" -ForegroundColor Cyan
+                Write-Color "`n📋 Using 'Standard' preset (13 ports)" 'Detail'
             }
             'Dental' {
                 $Ports = @(
@@ -479,7 +479,7 @@ function Scan-Network {
                     # Print Services
                     9100, 631
                 )
-                Write-Host "`n📋 Using 'Dental' preset (22 ports - optimized for dental practices)" -ForegroundColor Cyan
+                Write-Color "`n📋 Using 'Dental' preset (22 ports - optimized for dental practices)" 'Detail'
             }
             'Deep' {
                 $Ports = @(
@@ -504,15 +504,15 @@ function Scan-Network {
                     # Other
                     53, 88, 389, 636, 3128
                 )
-                Write-Host "`n📋 Using 'Deep' preset (45 ports - comprehensive scan)" -ForegroundColor Cyan
+                Write-Color "`n📋 Using 'Deep' preset (45 ports - comprehensive scan)" 'Detail'
             }
             'Web' {
                 $Ports = @(80, 443, 8080, 8443, 8000, 8888, 3000, 5000, 9000)
-                Write-Host "`n📋 Using 'Web' preset (9 ports)" -ForegroundColor Cyan
+                Write-Color "`n📋 Using 'Web' preset (9 ports)" 'Detail'
             }
             'Database' {
                 $Ports = @(1433, 1434, 3306, 5432, 27017, 6379, 1521, 5984, 9042, 7000, 7001)
-                Write-Host "`n📋 Using 'Database' preset (11 ports)" -ForegroundColor Cyan
+                Write-Color "`n📋 Using 'Database' preset (11 ports)" 'Detail'
             }
         }
     } elseif (-not $Ports) {
@@ -520,7 +520,7 @@ function Scan-Network {
         $Ports = @(22, 80, 443, 3389, 445, 139)
     }
     
-    Write-Host "    Ports: $($Ports -join ', ')" -ForegroundColor DarkGray
+    Write-Color "    Ports: $($Ports -join ', ')" 'Detail'
     
     # Determine OUI file path
     if (-not $OUIFilePath) {
@@ -541,7 +541,7 @@ function Scan-Network {
         
         if (-not $OUIFilePath) {
             Write-Warning "OUI database file (oui.txt) not found. Vendor lookup will be disabled."
-            Write-Host "    Download from: https://standards-oui.ieee.org/oui/oui.txt" -ForegroundColor DarkGray
+            Write-Color "    Download from: https://standards-oui.ieee.org/oui/oui.txt" 'Detail'
         }
     }
     
@@ -553,31 +553,31 @@ function Scan-Network {
     
     # Step 1: Detect interfaces (with retry loop for VPN handling)
     :InterfaceSelection while ($true) {
-        Write-Host "`n[1/4] Detecting active network interfaces..." -ForegroundColor Yellow
-        
+        Write-Color "`n[1/4] Detecting active network interfaces..." 'Header'
+
         try {
             $interfaces = Get-ActiveInterfaces
         } catch {
-            Write-Host "❌ Error detecting interfaces: $_" -ForegroundColor Red
+            Write-Color "$global:CbitCross Error detecting interfaces: $_" 'Bad'
             return
         }
-        
+
         if ($interfaces.Count -eq 0) {
-            Write-Host "❌ No active interfaces found!" -ForegroundColor Red
-            Write-Host "    Ensure you have an active network connection." -ForegroundColor DarkGray
+            Write-Color "$global:CbitCross No active interfaces found!" 'Bad'
+            Write-Color "    Ensure you have an active network connection." 'Detail'
             return
         }
-        
-        Write-Host "`nActive Interfaces:" -ForegroundColor Green
-        $interfaces | ForEach-Object { 
+
+        Write-Color "`nActive Interfaces:" 'Header'
+        $interfaces | ForEach-Object {
             $vpnIndicator = if ($_.PrefixLength -eq 32) { " [VPN Point-to-Point]" } else { "" }
-            Write-Host "  ✓ $($_.Name) - $($_.CIDR)$vpnIndicator ($($_.Description))" -ForegroundColor White
+            Write-Color "  $global:CbitCheck $($_.Name) - $($_.CIDR)$vpnIndicator ($($_.Description))"
         }
-        
+
         # Interface selection
         $selectedInterface = $interfaces[0]
         if ($interfaces.Count -gt 1) {
-            Write-Host "`n⚠️  Multiple interfaces detected. Select one to scan:" -ForegroundColor Yellow
+            Write-Color "`n$global:CbitWarnGlyph  Multiple interfaces detected. Select one to scan:" 'Warn'
             
             for ($i = 0; $i -lt $interfaces.Count; $i++) {
                 $vpnNote = if ($interfaces[$i].PrefixLength -eq 32) { " (VPN - /32)" } else { "" }
@@ -594,19 +594,19 @@ function Scan-Network {
             }
         }
         
-        Write-Host "`n✓ Selected: $($selectedInterface.Name) - $($selectedInterface.CIDR)" -ForegroundColor Green
-        
+        Write-Color "`n$global:CbitCheck Selected: $($selectedInterface.Name) - $($selectedInterface.CIDR)" 'Good'
+
         # Step 2: Clear ARP cache
-        Write-Host "`n[2/4] Preparing ARP cache..." -ForegroundColor Yellow
-        
+        Write-Color "`n[2/4] Preparing ARP cache..." 'Header'
+
         if (-not $NoCacheClear) {
             Clear-ARPCache | Out-Null
         } else {
-            Write-Host "    ⏭️  Skipping ARP cache clear (using -NoCacheClear)" -ForegroundColor DarkGray
+            Write-Color "    ⏭️  Skipping ARP cache clear (using -NoCacheClear)" 'Detail'
         }
-        
+
         # Step 3: Calculate IP range (this will handle /32 detection)
-        Write-Host "`n[3/4] Calculating host range..." -ForegroundColor Yellow
+        Write-Color "`n[3/4] Calculating host range..." 'Header'
         
         try {
             $ips = Get-NetworkRange -IP $selectedInterface.IPAddress -PrefixLength $selectedInterface.PrefixLength
@@ -619,31 +619,31 @@ function Scan-Network {
                 # User chose to return to interface selection
                 continue InterfaceSelection
             } else {
-                Write-Host "❌ Error calculating range: $_" -ForegroundColor Red
+                Write-Color "$global:CbitCross Error calculating range: $_" 'Bad'
                 return
             }
         }
     }
     
     # Continue with scan...
-    Write-Host "    Total hosts to scan: $($ips.Count)" -ForegroundColor DarkGray
-    
+    Write-Color "    Total hosts to scan: $($ips.Count)" 'Detail'
+
     if ($QuickScan) {
-        Write-Host "    ⚡ Quick scan mode (no port scanning)" -ForegroundColor DarkCyan
+        Write-Color "    ⚡ Quick scan mode (no port scanning)" 'Detail'
     } else {
-        Write-Host "    Port scan: $($Ports -join ', ')" -ForegroundColor DarkGray
+        Write-Color "    Port scan: $($Ports -join ', ')" 'Detail'
     }
-    
+
     if ($ouiDatabase.Count -gt 0) {
-        Write-Host "    📦 Vendor lookup: IEEE OUI database ($($ouiDatabase.Count) entries)" -ForegroundColor DarkGray
+        Write-Color "    📦 Vendor lookup: IEEE OUI database ($($ouiDatabase.Count) entries)" 'Detail'
     } else {
-        Write-Host "    📦 Vendor lookup: Disabled (no OUI database)" -ForegroundColor DarkGray
+        Write-Color "    📦 Vendor lookup: Disabled (no OUI database)" 'Detail'
     }
-    
-    Write-Host "    🧵 Threads: $ThrottleLimit" -ForegroundColor DarkGray
-    
+
+    Write-Color "    🧵 Threads: $ThrottleLimit" 'Detail'
+
     # Step 4: Scan network
-    Write-Host "`n[4/4] Scanning network..." -ForegroundColor Yellow
+    Write-Color "`n[4/4] Scanning network..." 'Header'
     
     $scanStart = Get-Date
     
@@ -694,82 +694,82 @@ function Scan-Network {
     # ══════════════════════════════════════════════════════════════════════════
     
     Write-Host "`n" -NoNewline
-    Write-Host ("═" * 70) -ForegroundColor Green
-    Write-Host "✅ Scan complete!" -ForegroundColor Green
-    Write-Host ("═" * 70) -ForegroundColor Green
-    
-    Write-Host "`n📊 Summary:" -ForegroundColor DarkCyan
-    Write-Host "    • Network:       $($selectedInterface.CIDR)" -ForegroundColor White
-    Write-Host "    • Hosts scanned: $($ips.Count)" -ForegroundColor White
-    Write-Host "    • Hosts found:   $($results.Count)" -ForegroundColor Green
-    Write-Host "    • Scan time:     $([math]::Round($scanDuration, 2))s" -ForegroundColor White
-    Write-Host "    • Speed:         $([math]::Round($ips.Count / $scanDuration, 1)) hosts/sec" -ForegroundColor White
-    
+    Write-Color ("═" * 70) 'Detail'
+    Write-Color "$global:CbitCheck Scan complete!" 'Good'
+    Write-Color ("═" * 70) 'Detail'
+
+    Write-Color "`n📊 Summary:" 'Header'
+    Write-Color "    • Network:       $($selectedInterface.CIDR)"
+    Write-Color "    • Hosts scanned: $($ips.Count)"
+    Write-Color "    • Hosts found:   $($results.Count)" 'Good'
+    Write-Color "    • Scan time:     $([math]::Round($scanDuration, 2))s"
+    Write-Color "    • Speed:         $([math]::Round($ips.Count / $scanDuration, 1)) hosts/sec"
+
     if ($ouiDatabase.Count -gt 0) {
-        Write-Host "    • OUI database:  $($ouiDatabase.Count) entries`n" -ForegroundColor White
+        Write-Color "    • OUI database:  $($ouiDatabase.Count) entries`n"
     } else {
-        Write-Host "    • OUI database:  Not loaded`n" -ForegroundColor White
+        Write-Color "    • OUI database:  Not loaded`n"
     }
-    
+
     if ($results.Count -eq 0) {
-        Write-Host "❌ No active hosts found on this network" -ForegroundColor Red
-        Write-Host "    Try:" -ForegroundColor DarkGray
-        Write-Host "    • Check if you're connected to the right network" -ForegroundColor DarkGray
-        Write-Host "    • Verify firewall settings" -ForegroundColor DarkGray
-        Write-Host "    • Try a different interface`n" -ForegroundColor DarkGray
+        Write-Color "$global:CbitCross No active hosts found on this network" 'Bad'
+        Write-Color "    Try:" 'Detail'
+        Write-Color "    • Check if you're connected to the right network" 'Detail'
+        Write-Color "    • Verify firewall settings" 'Detail'
+        Write-Color "    • Try a different interface`n" 'Detail'
         return
     }
-    
+
     # Display results table
-    Write-Host "📋 Discovered Hosts:" -ForegroundColor DarkCyan
+    Write-Color "📋 Discovered Hosts:" 'Header'
     $results | Format-Table -AutoSize
     
     # Save results globally
     $Global:LastScanResults = $results
     
     # Export helpers
-    Write-Host "💾 Results saved to: `$Global:LastScanResults`n" -ForegroundColor DarkCyan
-    
-    Write-Host "📤 Quick Export Commands:" -ForegroundColor Yellow
-    Write-Host "    • CSV:       `$Global:LastScanResults | Export-Csv 'network-scan.csv' -NoTypeInformation" -ForegroundColor White
-    Write-Host "    • JSON:      `$Global:LastScanResults | ConvertTo-Json | Out-File 'network-scan.json'" -ForegroundColor White
-    Write-Host "    • IPs only:  `$Global:LastScanResults.IPAddress | Set-Clipboard" -ForegroundColor White
-    Write-Host "    • MACs only: `$Global:LastScanResults.MAC | Set-Clipboard`n" -ForegroundColor White
+    Write-Color "💾 Results saved to: `$Global:LastScanResults`n" 'Detail'
+
+    Write-Color "📤 Quick Export Commands:" 'Header'
+    Write-Color "    • CSV:       `$Global:LastScanResults | Export-Csv 'network-scan.csv' -NoTypeInformation" 'Header'
+    Write-Color "    • JSON:      `$Global:LastScanResults | ConvertTo-Json | Out-File 'network-scan.json'" 'Header'
+    Write-Color "    • IPs only:  `$Global:LastScanResults.IPAddress | Set-Clipboard" 'Header'
+    Write-Color "    • MACs only: `$Global:LastScanResults.MAC | Set-Clipboard`n" 'Header'
     
     # Quick copy helpers
     $Global:CopyIPs = { 
         $Global:LastScanResults.IPAddress | Set-Clipboard
-        Write-Host "✓ $($Global:LastScanResults.Count) IPs copied to clipboard!" -ForegroundColor Green 
+        Write-Color "$global:CbitCheck $($Global:LastScanResults.Count) IPs copied to clipboard!" 'Good'
     }
     
     $Global:CopyMACs = { 
         $macs = $Global:LastScanResults.MAC | Where-Object { $_ }
         $macs | Set-Clipboard
-        Write-Host "✓ $($macs.Count) MAC addresses copied to clipboard!" -ForegroundColor Green 
+        Write-Color "$global:CbitCheck $($macs.Count) MAC addresses copied to clipboard!" 'Good'
     }
     
-    Write-Host "⚡ Quick Copy (run these commands):" -ForegroundColor Yellow
-    Write-Host "    • & `$Global:CopyIPs    - Copy all IPs to clipboard" -ForegroundColor White
-    Write-Host "    • & `$Global:CopyMACs   - Copy all MAC addresses to clipboard`n" -ForegroundColor White
+    Write-Color "⚡ Quick Copy (run these commands):" 'Header'
+    Write-Color "    • & `$Global:CopyIPs    - Copy all IPs to clipboard" 'Header'
+    Write-Color "    • & `$Global:CopyMACs   - Copy all MAC addresses to clipboard`n" 'Header'
     
     # Open in GridView, then offer copy/open actions on the selected row(s).
     # Out-GridView is read-only (no double-click/per-cell copy), so -PassThru returns
     # the selected rows on OK and we act on them from the console. Closing the window
     # (Cancel/X) returns nothing and exits the loop.
-    Write-Host "🔎 Opening results in GridView (filter, select row(s) + OK for copy/open actions; Ctrl+C copies whole rows)..." -ForegroundColor DarkCyan
+    Write-Color "🔎 Opening results in GridView (filter, select row(s) + OK for copy/open actions; Ctrl+C copies whole rows)..." 'Detail'
 
     while ($true) {
         $selected = $results | Out-GridView -PassThru -Title "Network Scan Results - $($selectedInterface.CIDR) | Found: $($results.Count) hosts | Select row(s) + OK for actions"
         if (-not $selected) { break }   # window closed / cancelled
 
-        Write-Host "`nSelected $($selected.Count) host(s):" -ForegroundColor DarkCyan
-        $selected | ForEach-Object { Write-Host "    • $($_.IPAddress)  $($_.Hostname)  $($_.MAC)" -ForegroundColor White }
+        Write-Color "`nSelected $($selected.Count) host(s):" 'Header'
+        $selected | ForEach-Object { Write-Color "    • $($_.IPAddress)  $($_.Hostname)  $($_.MAC)" }
 
-        Write-Host "`nActions:" -ForegroundColor Yellow
-        Write-Host "  [1] Copy MAC(s) to clipboard" -ForegroundColor White
-        Write-Host "  [2] Copy IP(s) to clipboard" -ForegroundColor White
-        Write-Host "  [3] Open web interface(s) in browser" -ForegroundColor White
-        Write-Host "  [B] Back to grid    [Q] Done" -ForegroundColor DarkGray
+        Write-Color "`nActions:" 'Header'
+        Write-Color "  [1] Copy MAC(s) to clipboard"
+        Write-Color "  [2] Copy IP(s) to clipboard"
+        Write-Color "  [3] Open web interface(s) in browser"
+        Write-Color "  [B] Back to grid    [Q] Done" 'Detail'
         $action = Read-Host "Choose"
 
         switch -Regex ($action) {
@@ -777,15 +777,15 @@ function Scan-Network {
                 $macs = $selected.MAC | Where-Object { $_ }
                 if ($macs) {
                     $macs | Set-Clipboard
-                    Write-Host "✓ Copied $($macs.Count) MAC(s) to clipboard" -ForegroundColor Green
+                    Write-Color "$global:CbitCheck Copied $($macs.Count) MAC(s) to clipboard" 'Good'
                 } else {
-                    Write-Host "⚠ No MAC addresses on the selected host(s)" -ForegroundColor Yellow
+                    Write-Color "$global:CbitWarnGlyph No MAC addresses on the selected host(s)" 'Warn'
                 }
             }
             '^2$' {
                 $ipList = $selected.IPAddress | Where-Object { $_ }
                 $ipList | Set-Clipboard
-                Write-Host "✓ Copied $($ipList.Count) IP(s) to clipboard" -ForegroundColor Green
+                Write-Color "$global:CbitCheck Copied $($ipList.Count) IP(s) to clipboard" 'Good'
             }
             '^3$' {
                 if ($selected.Count -gt 5) {
@@ -794,13 +794,13 @@ function Scan-Network {
                 }
                 foreach ($h in $selected) {
                     $url = Get-HostUrl -HostObj $h
-                    Write-Host "🌐 Opening $url" -ForegroundColor Cyan
+                    Write-Color "🌐 Opening $url"
                     Start-Process $url
                 }
             }
             '^[Bb]$' { continue }
             '^[Qq]$' { break }
-            default  { Write-Host "Invalid choice." -ForegroundColor Red }
+            default  { Write-Color "Invalid choice." 'Bad' }
         }
     }
 }

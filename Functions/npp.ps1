@@ -11,8 +11,8 @@ function npp {
     $nppPath = $searchPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
 
     if (-not $nppPath) {
-        Write-Host "❌ Notepad++ not found. Install it with:" -ForegroundColor Red
-        Write-Host "   winget install Notepad++.Notepad++" -ForegroundColor Cyan
+        Write-Color "$global:CbitCross Notepad++ not found. Install it with:" 'Bad'
+        Write-Color "   winget install Notepad++.Notepad++" 'Header'
         return
     }
 

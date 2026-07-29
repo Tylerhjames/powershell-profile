@@ -11,27 +11,27 @@ function Get-BitLockerInformation {
     # Check for Administrator privileges
     $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
     $isAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    
+
     if (-NOT $isAdmin) {
-        Write-Host "`nERROR: This function requires Administrator privileges!" -ForegroundColor Red
-        Write-Host "Please run PowerShell as Administrator and try again.`n" -ForegroundColor Yellow
+        Write-Color "`nERROR: This function requires Administrator privileges!" 'Bad'
+        Write-Color "Please run PowerShell as Administrator and try again.`n" 'Warn'
         return
     }
 
     function Show-BitLockerStatus {
-        Write-Host "`n========================================" -ForegroundColor DarkGreen
-        Write-Host "    BitLocker Status Report" -ForegroundColor DarkGreen
-        Write-Host "========================================`n" -ForegroundColor DarkGreen
-        
+        Write-Color "`n========================================" 'Header'
+        Write-Color "    BitLocker Status Report" 'Header'
+        Write-Color "========================================`n" 'Header'
+
         $volumes = Get-BitLockerVolume
-        
+
         if ($volumes.Count -eq 0) {
-            Write-Host "No volumes found.`n" -ForegroundColor Yellow
+            Write-Color "No volumes found.`n" 'Warn'
             return $null
         }
-        
+
         $statusTable = @()
-        
+
         foreach ($volume in $volumes) {
             $statusTable += [PSCustomObject]@{
                 'Drive'              = $volume.MountPoint
@@ -41,52 +41,52 @@ function Get-BitLockerInformation {
                 'Key Protectors'     = ($volume.KeyProtector | Measure-Object).Count
             }
         }
-        
+
         $statusTable | Format-Table -AutoSize
         return $volumes
     }
 
     function Enable-BitLockerOnDrive {
         param ([string]$DriveLetter)
-        
-        Write-Host "`nEnabling BitLocker on drive $DriveLetter..." -ForegroundColor Yellow
-        
+
+        Write-Color "`nEnabling BitLocker on drive $DriveLetter..." 'Detail'
+
         $volume = Get-BitLockerVolume -MountPoint $DriveLetter -ErrorAction SilentlyContinue
         if (-not $volume) {
-            Write-Host "ERROR: Drive $DriveLetter not found!`n" -ForegroundColor Red
+            Write-Color "ERROR: Drive $DriveLetter not found!`n" 'Bad'
             return
         }
-        
+
         if ($volume.ProtectionStatus -eq "On") {
-            Write-Host "Drive $DriveLetter is already protected by BitLocker.`n" -ForegroundColor Green
+            Write-Color "Drive $DriveLetter is already protected by BitLocker.`n" 'Good'
             return
         }
-        
-        Write-Host "`nSelect encryption method:" -ForegroundColor DarkGreen
+
+        Write-Color "`nSelect encryption method:" 'Header'
         Write-Host "1. Password protection"
         Write-Host "2. Recovery Key (saved to Desktop)"
         Write-Host "3. TPM (system drives only)"
         $encMethod = Read-Host "Enter choice (1-3)"
-        
+
         try {
             switch ($encMethod) {
                 "1" {
                     $password = Read-Host "Enter password" -AsSecureString
                     $passwordConfirm = Read-Host "Confirm password" -AsSecureString
-                    
+
                     $pwd1 = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))
                     $pwd2 = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($passwordConfirm))
-                    
+
                     if ($pwd1 -ne $pwd2) {
-                        Write-Host "ERROR: Passwords do not match!`n" -ForegroundColor Red
+                        Write-Color "ERROR: Passwords do not match!`n" 'Bad'
                         return
                     }
-                    
+
                     Enable-BitLocker -MountPoint $DriveLetter -PasswordProtector -Password $password
                 }
                 "2" {
                     Enable-BitLocker -MountPoint $DriveLetter -RecoveryKeyProtector -RecoveryKeyPath "$env:USERPROFILE\Desktop"
-                    Write-Host "`nRecovery key saved to Desktop!" -ForegroundColor Green
+                    Write-Color "`nRecovery key saved to Desktop!" 'Good'
                 }
                 "3" {
                     $tpm = Get-Tpm
@@ -94,85 +94,85 @@ function Get-BitLockerInformation {
                         Enable-BitLocker -MountPoint $DriveLetter -TpmProtector
                         Add-BitLockerKeyProtector -MountPoint $DriveLetter -RecoveryPasswordProtector
                     } else {
-                        Write-Host "ERROR: TPM is not available or ready!`n" -ForegroundColor Red
+                        Write-Color "ERROR: TPM is not available or ready!`n" 'Bad'
                         return
                     }
                 }
                 default {
-                    Write-Host "Invalid selection!`n" -ForegroundColor Red
+                    Write-Color "Invalid selection!`n" 'Bad'
                     return
                 }
             }
-            
-            Write-Host "`nBitLocker encryption started successfully!" -ForegroundColor Green
-            Write-Host "Encryption will continue in the background.`n" -ForegroundColor Yellow
-            
+
+            Write-Color "`nBitLocker encryption started successfully!" 'Good'
+            Write-Color "Encryption will continue in the background.`n" 'Detail'
+
         } catch {
-            Write-Host "ERROR: Failed to enable BitLocker - $($_.Exception.Message)`n" -ForegroundColor Red
+            Write-Color "ERROR: Failed to enable BitLocker - $($_.Exception.Message)`n" 'Bad'
         }
     }
 
     function Disable-BitLockerOnDrive {
         param ([string]$DriveLetter)
-        
-        Write-Host "`nWARNING: Disabling BitLocker will decrypt the drive!" -ForegroundColor Yellow
-        Write-Host "This will leave your data unprotected." -ForegroundColor Yellow
+
+        Write-Color "`nWARNING: Disabling BitLocker will decrypt the drive!" 'Warn'
+        Write-Color "This will leave your data unprotected." 'Warn'
         $confirm = Read-Host "Are you sure you want to continue? (yes/no)"
-        
+
         if ($confirm -ne "yes") {
-            Write-Host "Operation cancelled.`n" -ForegroundColor DarkGreen
+            Write-Color "Operation cancelled.`n" 'Good'
             return
         }
-        
+
         try {
-            Write-Host "`nDisabling BitLocker on drive $DriveLetter..." -ForegroundColor Yellow
+            Write-Color "`nDisabling BitLocker on drive $DriveLetter..." 'Detail'
             Disable-BitLocker -MountPoint $DriveLetter
-            Write-Host "BitLocker decryption started successfully!" -ForegroundColor Green
-            Write-Host "Decryption will continue in the background.`n" -ForegroundColor Yellow
+            Write-Color "BitLocker decryption started successfully!" 'Good'
+            Write-Color "Decryption will continue in the background.`n" 'Detail'
         } catch {
-            Write-Host "ERROR: Failed to disable BitLocker - $($_.Exception.Message)`n" -ForegroundColor Red
+            Write-Color "ERROR: Failed to disable BitLocker - $($_.Exception.Message)`n" 'Bad'
         }
     }
 
     function Get-RecoveryKeys {
-        Write-Host "`n========================================" -ForegroundColor DarkGreen
-        Write-Host "    BitLocker Recovery Keys" -ForegroundColor DarkGreen
-        Write-Host "========================================`n" -ForegroundColor DarkGreen
-        
+        Write-Color "`n========================================" 'Header'
+        Write-Color "    BitLocker Recovery Keys" 'Header'
+        Write-Color "========================================`n" 'Header'
+
         $volumes = Get-BitLockerVolume | Where-Object { $_.ProtectionStatus -eq "On" }
-        
+
         foreach ($volume in $volumes) {
-            Write-Host "Drive: $($volume.MountPoint)" -ForegroundColor Yellow
+            Write-Color "Drive: $($volume.MountPoint)" 'Header'
             $recoveryProtectors = $volume.KeyProtector | Where-Object { $_.KeyProtectorType -eq "RecoveryPassword" }
-            
+
             if ($recoveryProtectors) {
                 foreach ($protector in $recoveryProtectors) {
-                    Write-Host "  Recovery Password: $($protector.RecoveryPassword)" -ForegroundColor Green
+                    Write-Color "  Recovery Password: $($protector.RecoveryPassword)"
                 }
             } else {
-                Write-Host "  No recovery password found" -ForegroundColor Red
+                Write-Color "  No recovery password found" 'Bad'
             }
             Write-Host ""
         }
     }
 
     function Show-Menu {
-        Write-Host "`n========================================" -ForegroundColor DarkGreen
-        Write-Host "    BitLocker Management Menu" -ForegroundColor DarkGreen
-        Write-Host "========================================" -ForegroundColor DarkGreen
-        Write-Host "1. Show BitLocker Status" -ForegroundColor White
-        Write-Host "2. Enable BitLocker on a Drive" -ForegroundColor White
-        Write-Host "3. Disable BitLocker on a Drive" -ForegroundColor White
-        Write-Host "4. Get Recovery Keys" -ForegroundColor White
-        Write-Host "5. Exit" -ForegroundColor White
-        Write-Host "========================================" -ForegroundColor DarkGreen
+        Write-Color "`n========================================" 'Header'
+        Write-Color "    BitLocker Management Menu" 'Header'
+        Write-Color "========================================" 'Header'
+        Write-Host "1. Show BitLocker Status"
+        Write-Host "2. Enable BitLocker on a Drive"
+        Write-Host "3. Disable BitLocker on a Drive"
+        Write-Host "4. Get Recovery Keys"
+        Write-Host "5. Exit"
+        Write-Color "========================================" 'Header'
     }
 
     # Main script execution
     Clear-Host
-    Write-Host "========================================" -ForegroundColor DarkGreen
-    Write-Host "  BitLocker Management Tool" -ForegroundColor DarkGreen
-    Write-Host "========================================" -ForegroundColor DarkGreen
+    Write-Color "========================================" 'Header'
+    Write-Color "  BitLocker Management Tool" 'Header'
+    Write-Color "========================================" 'Header'
 
     # Initial status check
     Show-BitLockerStatus
@@ -181,7 +181,7 @@ function Get-BitLockerInformation {
     do {
         Show-Menu
         $choice = Read-Host "`nEnter your choice (1-5)"
-        
+
         switch ($choice) {
             "1" {
                 Show-BitLockerStatus
@@ -204,18 +204,18 @@ function Get-BitLockerInformation {
                 Get-RecoveryKeys
             }
             "5" {
-                Write-Host "`nExiting...`n" -ForegroundColor DarkGreen
+                Write-Color "`nExiting...`n" 'Detail'
                 break
             }
             default {
-                Write-Host "`nInvalid choice! Please select 1-5.`n" -ForegroundColor Red
+                Write-Color "`nInvalid choice! Please select 1-5.`n" 'Bad'
             }
         }
-        
+
         if ($choice -ne "5") {
-            Write-Host "`nPress Enter to continue..." -ForegroundColor Gray
+            Write-Color "`nPress Enter to continue..." 'Detail'
             Read-Host
         }
-        
+
     } while ($choice -ne "5")
 }

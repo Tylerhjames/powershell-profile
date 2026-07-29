@@ -15,6 +15,35 @@ $ErrorActionPreference = 'SilentlyContinue'
 $repo = $PSScriptRoot
 $results = [System.Collections.Generic.List[PSCustomObject]]::new()
 
+# --- CBIT matte palette (embedded: this script runs with -NoProfile) ---
+$Esc     = [char]27
+$UseAnsi = ($PSVersionTable.PSVersion.Major -ge 7) -or [bool]$env:WT_SESSION
+$Palette = @{
+    Good   = @{ Rgb = '143;168;128'; Fallback = 'DarkGreen'  }  # sage green
+    Bad    = @{ Rgb = '150;60;60'  ; Fallback = 'DarkRed'    }  # matte dark red
+    Detail = @{ Rgb = '128;128;120'; Fallback = 'DarkGray'   }  # muted gray
+    Warn   = @{ Rgb = '176;137;70' ; Fallback = 'DarkYellow' }  # matte amber
+    Header = @{ Rgb = '178;178;170'; Fallback = 'Gray'       }  # soft gray
+}
+
+function Write-Color {
+    param(
+        [string]$Text,
+        [string]$Color = '',
+        [switch]$NoNewline
+    )
+    if (-not $Color) {
+        Write-Host $Text -NoNewline:$NoNewline
+    }
+    elseif ($UseAnsi) {
+        $rgb = $Palette[$Color].Rgb
+        Write-Host ("{0}[38;2;{1}m{2}{0}[0m" -f $Esc, $rgb, $Text) -NoNewline:$NoNewline
+    }
+    else {
+        Write-Host $Text -ForegroundColor $Palette[$Color].Fallback -NoNewline:$NoNewline
+    }
+}
+
 function Measure-Section {
     param(
         [string]$Name,
@@ -46,12 +75,12 @@ function Measure-Section {
 }
 
 Write-Host ""
-Write-Host "================================================================" -ForegroundColor Cyan
-Write-Host "  PowerShell Profile Startup Benchmark" -ForegroundColor Cyan
-Write-Host "  PowerShell Version: $($PSVersionTable.PSVersion)" -ForegroundColor Cyan
-Write-Host "  Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Cyan
-Write-Host "  Host: $($env:COMPUTERNAME)" -ForegroundColor Cyan
-Write-Host "================================================================" -ForegroundColor Cyan
+Write-Color "================================================================" 'Detail'
+Write-Color "  PowerShell Profile Startup Benchmark" 'Header'
+Write-Color "  PowerShell Version: $($PSVersionTable.PSVersion)" 'Header'
+Write-Color "  Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" 'Header'
+Write-Color "  Host: $($env:COMPUTERNAME)" 'Header'
+Write-Color "================================================================" 'Detail'
 Write-Host ""
 Write-Host ("{0,-45} {1,8}     {2}" -f "SECTION", "AVG", "(min / max)")
 Write-Host ("{0,-45} {1,8}     {2}" -f "-------", "---", "-----------")
@@ -62,7 +91,7 @@ Measure-Section "TOTAL: Full Profile.ps1 load" {
 } -Iterations 3
 
 Write-Host ""
-Write-Host "--- Individual Section Breakdown ---" -ForegroundColor Yellow
+Write-Color "--- Individual Section Breakdown ---" 'Header'
 Write-Host ""
 
 # ── 2. Git operations (fetch + compare + pull) ──
@@ -147,9 +176,9 @@ Measure-Section "Test-Path checks (repo + functions dir)" {
 
 # ── Summary ──
 Write-Host ""
-Write-Host "================================================================" -ForegroundColor Green
-Write-Host "  Benchmark Complete" -ForegroundColor Green
-Write-Host "================================================================" -ForegroundColor Green
+Write-Color "================================================================" 'Detail'
+Write-Color "  Benchmark Complete" 'Good'
+Write-Color "================================================================" 'Detail'
 Write-Host ""
 
 # Save results
@@ -167,7 +196,7 @@ OS:         $([System.Environment]::OSVersion.VersionString)
 $tableOutput = $results | Format-Table -AutoSize | Out-String
 $header + $tableOutput | Set-Content $outFile -Encoding UTF8
 
-Write-Host "Results saved to: $outFile" -ForegroundColor Cyan
+Write-Color "Results saved to: $outFile" 'Good'
 Write-Host ""
-Write-Host "Next step: Share the results file or paste the output above." -ForegroundColor Yellow
+Write-Color "Next step: Share the results file or paste the output above." 'Detail'
 Write-Host ""

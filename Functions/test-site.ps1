@@ -8,29 +8,29 @@ function Test-Site {
     # Strip protocol prefix if provided so we don't double it
     $hostname = $Target -replace '^https?://', '' -replace '/.*$', ''
 
-    Write-Host "`nResolving $hostname..." -ForegroundColor Cyan
+    Write-Color "`nResolving $hostname..." 'Header'
     try {
         Resolve-DnsName $hostname -ErrorAction Stop | Out-Null
-        Write-Host "✅ DNS resolved" -ForegroundColor Green
+        Write-Color "$global:CbitCheck DNS resolved" 'Good'
     }
     catch {
-        Write-Host "❌ DNS resolution failed: $_" -ForegroundColor Red
+        Write-Color "$global:CbitCross DNS resolution failed: $_" 'Bad'
     }
 
-    Write-Host "`nPinging $hostname..." -ForegroundColor Cyan
+    Write-Color "`nPinging $hostname..." 'Header'
     if (Test-Connection $hostname -Count 2 -Quiet) {
-        Write-Host "✅ Ping successful" -ForegroundColor Green
+        Write-Color "$global:CbitCheck Ping successful" 'Good'
     }
     else {
-        Write-Host "❌ Ping failed (ICMP may be blocked)" -ForegroundColor Red
+        Write-Color "$global:CbitCross Ping failed (ICMP may be blocked)" 'Bad'
     }
 
-    Write-Host "`nTesting HTTPS..." -ForegroundColor Cyan
+    Write-Color "`nTesting HTTPS..." 'Header'
     try {
         $r = Invoke-WebRequest "https://$hostname" -UseBasicParsing -TimeoutSec 5
-        Write-Host "✅ HTTP Status: $($r.StatusCode)" -ForegroundColor Green
+        Write-Color "$global:CbitCheck HTTP Status: $($r.StatusCode)" 'Good'
     }
     catch {
-        Write-Host "❌ HTTPS connection failed: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Color "$global:CbitCross HTTPS connection failed: $($_.Exception.Message)" 'Bad'
     }
 }

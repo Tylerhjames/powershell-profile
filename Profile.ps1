@@ -14,6 +14,47 @@ $ErrorActionPreference = 'SilentlyContinue'
 $script:ProfileRepo = $PSScriptRoot
 
 # ══════════════════════════════════════════════════════════════════════════════
+# CBIT Matte Palette + Write-Color (shared by all Functions)
+# ══════════════════════════════════════════════════════════════════════════════
+# Per the CBIT PowerShell Console Style Guide: matte colors only — no teal,
+# cyan, or bright/saturated ConsoleColors. True RGB via ANSI when supported
+# (PS7 or Windows Terminal); nearest matte ConsoleColor otherwise.
+# Global scope so lazy-loaded Functions and event handlers can use them.
+
+$global:CbitUseAnsi = ($PSVersionTable.PSVersion.Major -ge 7) -or [bool]$env:WT_SESSION
+$global:CbitPalette = @{
+    Good   = @{ Rgb = '143;168;128'; Fallback = 'DarkGreen'  }  # sage green
+    Bad    = @{ Rgb = '150;60;60'  ; Fallback = 'DarkRed'    }  # matte dark red
+    Detail = @{ Rgb = '128;128;120'; Fallback = 'DarkGray'   }  # muted gray
+    Warn   = @{ Rgb = '176;137;70' ; Fallback = 'DarkYellow' }  # matte amber
+    Header = @{ Rgb = '178;178;170'; Fallback = 'Gray'       }  # soft gray
+}
+
+# Glyphs via [char] codes — immune to file-encoding problems
+$global:CbitCheck = [char]0x2713   # ✓
+$global:CbitCross = [char]0x2717   # ✗
+$global:CbitWarnGlyph = [char]0x26A0   # ⚠
+
+function global:Write-Color {
+    param(
+        [string]$Text,
+        [string]$Color = '',
+        [switch]$NoNewline
+    )
+    if (-not $Color) {
+        Write-Host $Text -NoNewline:$NoNewline
+    }
+    elseif ($global:CbitUseAnsi) {
+        $e = [char]27
+        $rgb = $global:CbitPalette[$Color].Rgb
+        Write-Host ("{0}[38;2;{1}m{2}{0}[0m" -f $e, $rgb, $Text) -NoNewline:$NoNewline
+    }
+    else {
+        Write-Host $Text -ForegroundColor $global:CbitPalette[$Color].Fallback -NoNewline:$NoNewline
+    }
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Phase 1: Background Git Sync (non-blocking)
 # ══════════════════════════════════════════════════════════════════════════════
 # Rationale: git fetch was 454ms avg and blocked the prompt. This fires the
@@ -147,15 +188,15 @@ if (Test-Path $functionsPath) {
 
 if (-not (Get-Command winget.exe -CommandType Application -ErrorAction SilentlyContinue)) {
     function global:winget {
-        Write-Host 'winget not found — attempting self-repair...' -ForegroundColor Yellow
+        Write-Color 'winget not found — attempting self-repair...' 'Warn'
         if (Repair-Winget) {
             # Remove the shim so winget.exe resolves normally from here on
             Remove-Item Function:\global:winget -Force -ErrorAction SilentlyContinue
             if ($args.Count -gt 0) { & winget.exe @args }
         } else {
-            Write-Host 'Self-repair failed. Run ' -ForegroundColor Red -NoNewline
-            Write-Host 'Repair-Winget -Verbose' -ForegroundColor Cyan -NoNewline
-            Write-Host ' for details.' -ForegroundColor Red
+            Write-Color 'Self-repair failed. Run ' 'Bad' -NoNewline
+            Write-Color 'Repair-Winget -Verbose' 'Header' -NoNewline
+            Write-Color ' for details.' 'Bad'
         }
     }
 }
@@ -190,9 +231,9 @@ Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
 Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
 Set-PSReadLineKeyHandler -Chord 'Ctrl+r' -Function ReverseSearchHistory
 
-# ── Muted Sage Green Formatting ──
-$PSStyle.Formatting.FormatAccent = "`e[38;2;134;166;137m"
-$PSStyle.Formatting.TableHeader = "`e[38;2;134;166;137m"
+# ── Muted Sage Green Formatting (palette 'Good' RGB) ──
+$PSStyle.Formatting.FormatAccent = "`e[38;2;143;168;128m"
+$PSStyle.Formatting.TableHeader = "`e[38;2;143;168;128m"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Module Management
@@ -206,7 +247,7 @@ $PSStyle.Formatting.TableHeader = "`e[38;2;134;166;137m"
 function Install-ProfileModule {
     param([string]$ModuleName)
     if (-not (Get-Module -ListAvailable $ModuleName)) {
-        Write-Host "Installing $ModuleName..." -ForegroundColor Cyan
+        Write-Color "Installing $ModuleName..." 'Detail'
         Install-Module $ModuleName -Scope CurrentUser -Force -AllowClobber *>$null
     }
 }
@@ -221,7 +262,7 @@ function Reload-Profile {
     Reloads the PowerShell profile
     #>
     . $PROFILE
-    Write-Host "✓ Profile reloaded" -ForegroundColor Green
+    Write-Color "$global:CbitCheck Profile reloaded" 'Good'
 }
 Set-Alias -Name rpl -Value Reload-Profile -Scope Global
 
@@ -236,13 +277,13 @@ function Update-Profile {
     if ([string]::IsNullOrEmpty($status)) {
         git pull --ff-only --quiet *>$null
         if ($LASTEXITCODE -eq 0) {
-            Write-Host "✓ Profile force-updated" -ForegroundColor DarkGreen
+            Write-Color "$global:CbitCheck Profile force-updated" 'Good'
             . $PROFILE
         } else {
-            Write-Host "✗ Update failed" -ForegroundColor Red
+            Write-Color "$global:CbitCross Update failed" 'Bad'
         }
     } else {
-        Write-Host "⚠ Local changes present — commit or stash first" -ForegroundColor Yellow
+        Write-Color "$global:CbitWarnGlyph Local changes present — commit or stash first" 'Warn'
         git status --short
     }
 
@@ -266,12 +307,12 @@ function Sync-Profile {
         $status = git status --porcelain 2>$null
 
         if ([string]::IsNullOrEmpty($status)) {
-            Write-Host "✓ No changes to sync" -ForegroundColor Gray
+            Write-Color "$global:CbitCheck No changes to sync" 'Detail'
             return
         }
 
         # Show what's being synced
-        Write-Host "Changes to sync:" -ForegroundColor Cyan
+        Write-Color "Changes to sync:" 'Header'
         git status --short
 
         # Commit and push
@@ -281,16 +322,16 @@ function Sync-Profile {
         if ($LASTEXITCODE -eq 0) {
             git push *>$null
             if ($LASTEXITCODE -eq 0) {
-                Write-Host "✓ Profile synced to GitHub" -ForegroundColor DarkGreen
+                Write-Color "$global:CbitCheck Profile synced to GitHub" 'Good'
             } else {
-                Write-Host "✗ Push failed - check network connection" -ForegroundColor Red
+                Write-Color "$global:CbitCross Push failed - check network connection" 'Bad'
             }
         } else {
-            Write-Host "✗ Commit failed" -ForegroundColor Red
+            Write-Color "$global:CbitCross Commit failed" 'Bad'
         }
     }
     catch {
-        Write-Host "✗ Sync failed: $_" -ForegroundColor Red
+        Write-Color "$global:CbitCross Sync failed: $_" 'Bad'
     }
     finally {
         Pop-Location
@@ -342,7 +383,7 @@ function Show-ProfileStatus {
     Shows Git status of profile repository
     #>
     Push-Location $script:ProfileRepo
-    Write-Host "`nProfile Repository Status:" -ForegroundColor Cyan
+    Write-Color "`nProfile Repository Status:" 'Header'
     git status
     Pop-Location
 }
@@ -430,11 +471,11 @@ if (Get-Module PSReadLine) {
             Remove-Item $gitFlag -Force -ErrorAction SilentlyContinue
 
             switch ($result) {
-                'updated'       { Write-Host "`n✓ Profile updated from GitHub — run " -ForegroundColor DarkGreen -NoNewline
-                                  Write-Host "Reload-Profile" -ForegroundColor Cyan -NoNewline
-                                  Write-Host " to apply" -ForegroundColor DarkGreen }
-                'local-changes' { Write-Host "`n⚠ Profile sync skipped — local changes detected" -ForegroundColor Yellow }
-                'pull-failed'   { Write-Host "`n✗ Profile auto-pull failed — check manually" -ForegroundColor Red }
+                'updated'       { Write-Color "`n$global:CbitCheck Profile updated from GitHub — run " 'Good' -NoNewline
+                                  Write-Color "Reload-Profile" 'Header' -NoNewline
+                                  Write-Color " to apply" 'Good' }
+                'local-changes' { Write-Color "`n$global:CbitWarnGlyph Profile sync skipped — local changes detected" 'Warn' }
+                'pull-failed'   { Write-Color "`n$global:CbitCross Profile auto-pull failed — check manually" 'Bad' }
             }
         }
 
@@ -443,10 +484,10 @@ if (Get-Module PSReadLine) {
         if (Test-Path $verFlag) {
             $parts = ((Get-Content $verFlag -Raw).Trim()) -split '\|'
             if ($parts.Count -eq 2) {
-                Write-Host "⬆ PowerShell $($parts[0]) available " -ForegroundColor DarkYellow -NoNewline
-                Write-Host "(current: $($parts[1]))" -ForegroundColor Gray -NoNewline
-                Write-Host " — run: " -ForegroundColor DarkYellow -NoNewline
-                Write-Host "winget upgrade Microsoft.PowerShell" -ForegroundColor Cyan
+                Write-Color "$([char]0x2B06) PowerShell $($parts[0]) available " 'Warn' -NoNewline
+                Write-Color "(current: $($parts[1]))" 'Detail' -NoNewline
+                Write-Color " — run: " 'Warn' -NoNewline
+                Write-Color "winget upgrade Microsoft.PowerShell" 'Header'
             }
             Remove-Item $verFlag -Force -ErrorAction SilentlyContinue
         }
@@ -473,7 +514,7 @@ if (Get-Module PSReadLine) {
 # Startup Message
 # ══════════════════════════════════════════════════════════════════════════════
 
-Write-Host "✓ Roaming PowerShell profile loaded" -ForegroundColor DarkGreen
+Write-Color "$global:CbitCheck Roaming PowerShell profile loaded" 'Good'
 
 # Reset error preference
 $ErrorActionPreference = 'Continue'

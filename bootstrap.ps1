@@ -29,10 +29,42 @@ $script:Config = @{
 # Helper Functions
 # ══════════════════════════════════════════════════════════════════════════════
 
-function Write-Info { param([string]$Message) Write-Host "[INFO] $Message" -ForegroundColor Cyan }
-function Write-Ok   { param([string]$Message) Write-Host "[ OK ] $Message" -ForegroundColor Green }
-function Write-Warn { param([string]$Message) Write-Host "[WARN] $Message" -ForegroundColor Yellow }
-function Write-Err  { param([string]$Message) Write-Host "[FAIL] $Message" -ForegroundColor Red }
+# --- CBIT matte palette (embedded: bootstrap runs with -NoProfile, so the
+# --- shared Write-Color from Profile.ps1 is not available here). ANSI RGB
+# --- when supported (PS7 / Windows Terminal); matte ConsoleColor fallback
+# --- for PS 5.1 in legacy conhost.
+$Esc     = [char]27
+$UseAnsi = ($PSVersionTable.PSVersion.Major -ge 7) -or [bool]$env:WT_SESSION
+$Palette = @{
+    Good   = @{ Rgb = '143;168;128'; Fallback = 'DarkGreen'  }  # sage green
+    Bad    = @{ Rgb = '150;60;60'  ; Fallback = 'DarkRed'    }  # matte dark red
+    Detail = @{ Rgb = '128;128;120'; Fallback = 'DarkGray'   }  # muted gray
+    Warn   = @{ Rgb = '176;137;70' ; Fallback = 'DarkYellow' }  # matte amber
+    Header = @{ Rgb = '178;178;170'; Fallback = 'Gray'       }  # soft gray
+}
+
+function Write-Color {
+    param(
+        [string]$Text,
+        [string]$Color = '',
+        [switch]$NoNewline
+    )
+    if (-not $Color) {
+        Write-Host $Text -NoNewline:$NoNewline
+    }
+    elseif ($UseAnsi) {
+        $rgb = $Palette[$Color].Rgb
+        Write-Host ("{0}[38;2;{1}m{2}{0}[0m" -f $Esc, $rgb, $Text) -NoNewline:$NoNewline
+    }
+    else {
+        Write-Host $Text -ForegroundColor $Palette[$Color].Fallback -NoNewline:$NoNewline
+    }
+}
+
+function Write-Info { param([string]$Message) Write-Color "[INFO] $Message" 'Detail' }
+function Write-Ok   { param([string]$Message) Write-Color "[ OK ] $Message" 'Good' }
+function Write-Warn { param([string]$Message) Write-Color "[WARN] $Message" 'Warn' }
+function Write-Err  { param([string]$Message) Write-Color "[FAIL] $Message" 'Bad' }
 
 function Test-IsAdmin {
     <#
@@ -509,9 +541,9 @@ if (-not (Test-Path `$gitProfile)) {
 
 try {
     Write-Host ""
-    Write-Host "══════════════════════════════════════════════════════════════════════════════" -ForegroundColor Cyan
-    Write-Host "  PowerShell Profile Bootstrap (Optimized)" -ForegroundColor Cyan
-    Write-Host "══════════════════════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+    Write-Color "══════════════════════════════════════════════════════════════════════════════" 'Detail'
+    Write-Color "  PowerShell Profile Bootstrap (Optimized)" 'Header'
+    Write-Color "══════════════════════════════════════════════════════════════════════════════" 'Detail'
     Write-Host ""
     
     # Check admin status
@@ -571,17 +603,17 @@ try {
     
     # Success summary
     Write-Host ""
-    Write-Host "══════════════════════════════════════════════════════════════════════════════" -ForegroundColor Green
+    Write-Color "══════════════════════════════════════════════════════════════════════════════" 'Detail'
     Write-Ok "Bootstrap completed successfully!"
-    Write-Host "══════════════════════════════════════════════════════════════════════════════" -ForegroundColor Green
+    Write-Color "══════════════════════════════════════════════════════════════════════════════" 'Detail'
     Write-Host ""
     Write-Info "Profile repository: $($Config.ProfileRepoPath)"
     Write-Info "Loader profile:     $($PROFILE.CurrentUserCurrentHost)"
     Write-Host ""
-    Write-Host "Next steps:" -ForegroundColor Cyan
-    Write-Host "  1. Close this window" -ForegroundColor White
-    Write-Host "  2. Open a new PowerShell 7 window (run 'pwsh')" -ForegroundColor White
-    Write-Host "  3. Your synced profile will load automatically" -ForegroundColor White
+    Write-Color "Next steps:" 'Header'
+    Write-Host "  1. Close this window"
+    Write-Host "  2. Open a new PowerShell 7 window (run 'pwsh')"
+    Write-Host "  3. Your synced profile will load automatically"
     Write-Host ""
     
 } catch {

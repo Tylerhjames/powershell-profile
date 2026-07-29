@@ -47,11 +47,11 @@ function Invoke-InternetSpeedTest {
     # ══════════════════════════════════════════════════════════════════════════
     
     function Install-SpeedtestCLI {
-        Write-Host "`n📦 Speedtest CLI not found. Installing..." -ForegroundColor Cyan
-        
+        Write-Color "`n📦 Speedtest CLI not found. Installing..." 'Header'
+
         # Create bin directory if needed
         if (-not (Test-Path $binRoot)) {
-            Write-Host "   Creating bin directory..." -ForegroundColor Gray
+            Write-Color "   Creating bin directory..." 'Detail'
             New-Item -ItemType Directory -Path $binRoot -Force | Out-Null
         }
         
@@ -59,16 +59,16 @@ function Invoke-InternetSpeedTest {
         
         try {
             # Download with progress
-            Write-Host "   Downloading from Ookla..." -ForegroundColor Gray
+            Write-Color "   Downloading from Ookla..." 'Detail'
             
             $ProgressPreference = 'SilentlyContinue'  # Faster downloads
             Invoke-WebRequest -Uri $downloadUrl -OutFile $zipPath -UseBasicParsing -ErrorAction Stop
             $ProgressPreference = 'Continue'
             
-            Write-Host "   ✓ Downloaded" -ForegroundColor Green
-            
+            Write-Color "   $($global:CbitCheck) Downloaded" 'Good'
+
             # Extract
-            Write-Host "   Extracting archive..." -ForegroundColor Gray
+            Write-Color "   Extracting archive..." 'Detail'
             Expand-Archive -Path $zipPath -DestinationPath $binRoot -Force
             
             # Cleanup
@@ -76,18 +76,18 @@ function Invoke-InternetSpeedTest {
             
             # Verify installation
             if (Test-Path $speedtestExe) {
-                Write-Host "   ✓ Installation complete`n" -ForegroundColor Green
+                Write-Color "   $($global:CbitCheck) Installation complete`n" 'Good'
                 return $true
             } else {
                 throw "Extraction succeeded but speedtest.exe not found"
             }
         }
         catch {
-            Write-Host "   ✗ Installation failed: $_" -ForegroundColor Red
-            Write-Host "`nTroubleshooting:" -ForegroundColor Yellow
-            Write-Host "  • Check internet connection" -ForegroundColor Gray
-            Write-Host "  • Verify Ookla website is accessible" -ForegroundColor Gray
-            Write-Host "  • Try manual download: $downloadUrl" -ForegroundColor Gray
+            Write-Color "   $($global:CbitCross) Installation failed: $_" 'Bad'
+            Write-Color "`nTroubleshooting:" 'Warn'
+            Write-Color "  • Check internet connection" 'Detail'
+            Write-Color "  • Verify Ookla website is accessible" 'Detail'
+            Write-Color "  • Try manual download: $downloadUrl" 'Detail'
             return $false
         }
     }
@@ -106,9 +106,9 @@ function Invoke-InternetSpeedTest {
     # Main Execution
     # ══════════════════════════════════════════════════════════════════════════
     
-    Write-Host "`n═══════════════════════════════════════" -ForegroundColor Cyan
-    Write-Host "  Internet Speed Test (Speedtest.net)" -ForegroundColor Cyan
-    Write-Host "═══════════════════════════════════════`n" -ForegroundColor Cyan
+    Write-Color "`n═══════════════════════════════════════" 'Header'
+    Write-Color "  Internet Speed Test (Speedtest.net)" 'Header'
+    Write-Color "═══════════════════════════════════════`n" 'Header'
     
     # Check if CLI exists or force reinstall
     if ($Force -or -not (Test-Path $speedtestExe)) {
@@ -119,7 +119,7 @@ function Invoke-InternetSpeedTest {
     
     # Verify CLI is functional
     if (-not (Test-SpeedtestVersion)) {
-        Write-Host "⚠️  Speedtest CLI appears corrupted. Reinstalling..." -ForegroundColor Yellow
+        Write-Color "$($global:CbitWarnGlyph)  Speedtest CLI appears corrupted. Reinstalling..." 'Warn'
         if (-not (Install-SpeedtestCLI)) {
             return
         }
@@ -134,16 +134,16 @@ function Invoke-InternetSpeedTest {
     }
     
     # Run speed test
-    Write-Host "🌐 Running Speedtest.net analysis..." -ForegroundColor Cyan
-    Write-Host "   (This may take 20-30 seconds)`n" -ForegroundColor Gray
+    Write-Color "🌐 Running Speedtest.net analysis..." 'Header'
+    Write-Color "   (This may take 20-30 seconds)`n" 'Detail'
     
     try {
         $jsonOutput = & $speedtestExe @arguments 2>&1
         
         # Check for errors
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ Speedtest CLI returned error code: $LASTEXITCODE" -ForegroundColor Red
-            Write-Host "`nRaw output:" -ForegroundColor Yellow
+            Write-Color "$($global:CbitCross) Speedtest CLI returned error code: $LASTEXITCODE" 'Bad'
+            Write-Color "`nRaw output:" 'Detail'
             Write-Host $jsonOutput
             return
         }
@@ -158,15 +158,15 @@ function Invoke-InternetSpeedTest {
         
     }
     catch {
-        Write-Host "❌ Failed to run or parse Speedtest results" -ForegroundColor Red
-        Write-Host "   Error: $_" -ForegroundColor Yellow
-        
+        Write-Color "$($global:CbitCross) Failed to run or parse Speedtest results" 'Bad'
+        Write-Color "   Error: $_" 'Warn'
+
         if ($jsonOutput) {
-            Write-Host "`n   Raw output:" -ForegroundColor Gray
+            Write-Color "`n   Raw output:" 'Detail'
             Write-Host "   $jsonOutput"
         }
-        
-        Write-Host "`n   Try running with -Force to reinstall CLI" -ForegroundColor Yellow
+
+        Write-Color "`n   Try running with -Force to reinstall CLI" 'Header'
         return
     }
     
@@ -186,46 +186,46 @@ function Invoke-InternetSpeedTest {
     # ISP info
     $ispName = $result.isp
     
-    Write-Host "═══════════════════════════════════════" -ForegroundColor Green
-    Write-Host "  Results" -ForegroundColor Green
-    Write-Host "═══════════════════════════════════════`n" -ForegroundColor Green
-    
-    Write-Host "Server:      $serverName" -ForegroundColor White
-    Write-Host "Location:    $serverLocation" -ForegroundColor White
-    Write-Host "ISP:         $ispName`n" -ForegroundColor White
-    
-    Write-Host "Download:    $downloadMbps Mbps" -ForegroundColor Cyan
-    Write-Host "Upload:      $uploadMbps Mbps" -ForegroundColor Cyan
-    Write-Host "Latency:     $latencyMs ms" -ForegroundColor Cyan
-    Write-Host "Jitter:      $jitterMs ms`n" -ForegroundColor Cyan
-    
+    Write-Color "═══════════════════════════════════════" 'Header'
+    Write-Color "  Results" 'Header'
+    Write-Color "═══════════════════════════════════════`n" 'Header'
+
+    Write-Color "Server:      $serverName"
+    Write-Color "Location:    $serverLocation"
+    Write-Color "ISP:         $ispName`n"
+
+    Write-Color "Download:    $downloadMbps Mbps"
+    Write-Color "Upload:      $uploadMbps Mbps"
+    Write-Color "Latency:     $latencyMs ms"
+    Write-Color "Jitter:      $jitterMs ms`n"
+
     # Performance rating
     $rating = if ($downloadMbps -ge 500) {
-        @{ Message = "🚀 Excellent - Premium internet speeds!"; Color = 'Green' }
+        @{ Message = "$($global:CbitCheck) Excellent - Premium internet speeds!"; Color = 'Good' }
     } elseif ($downloadMbps -ge 200) {
-        @{ Message = "✅ Great - Above-average performance"; Color = 'Green' }
+        @{ Message = "$($global:CbitCheck) Great - Above-average performance"; Color = 'Good' }
     } elseif ($downloadMbps -ge 100) {
-        @{ Message = "✔️  Good - Typical broadband speeds"; Color = 'Cyan' }
+        @{ Message = "$($global:CbitCheck)  Good - Typical broadband speeds"; Color = 'Good' }
     } elseif ($downloadMbps -ge 50) {
-        @{ Message = "⚠️  Fair - Below typical speeds"; Color = 'Yellow' }
+        @{ Message = "$($global:CbitWarnGlyph)  Fair - Below typical speeds"; Color = 'Warn' }
     } else {
-        @{ Message = "❌ Poor - Possible ISP issues or congestion"; Color = 'Red' }
+        @{ Message = "$($global:CbitCross) Poor - Possible ISP issues or congestion"; Color = 'Bad' }
     }
-    
-    Write-Host $rating.Message -ForegroundColor $rating.Color
-    
+
+    Write-Color $rating.Message $rating.Color
+
     # Latency rating
     if ($latencyMs -le 20) {
-        Write-Host "⚡ Excellent latency for gaming/video calls" -ForegroundColor Green
+        Write-Color "⚡ Excellent latency for gaming/video calls" 'Good'
     } elseif ($latencyMs -le 50) {
-        Write-Host "✔️  Good latency" -ForegroundColor Cyan
+        Write-Color "$($global:CbitCheck)  Good latency" 'Good'
     } elseif ($latencyMs -le 100) {
-        Write-Host "⚠️  Fair latency" -ForegroundColor Yellow
+        Write-Color "$($global:CbitWarnGlyph)  Fair latency" 'Warn'
     } else {
-        Write-Host "❌ High latency - may affect real-time applications" -ForegroundColor Red
+        Write-Color "$($global:CbitCross) High latency - may affect real-time applications" 'Bad'
     }
-    
-    Write-Host "`n📊 Result URL: $($result.result.url)" -ForegroundColor Gray
+
+    Write-Color "`n📊 Result URL: $($result.result.url)" 'Detail'
     Write-Host ""
 }
 

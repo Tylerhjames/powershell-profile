@@ -80,27 +80,27 @@ function Test-EmailAuthentication {
     
     function Write-SectionHeader {
         param([string]$Title)
-        Write-Host "`n[$Title]" -ForegroundColor Yellow
+        Write-Color "`n[$Title]" 'Header'
     }
-    
+
     function Write-Success {
         param([string]$Message)
-        Write-Host "  ✔ $Message" -ForegroundColor Green
+        Write-Color "  $global:CbitCheck $Message" 'Good'
     }
-    
+
     function Write-Failure {
         param([string]$Message)
-        Write-Host "  ✖ $Message" -ForegroundColor Red
+        Write-Color "  $global:CbitCross $Message" 'Bad'
     }
-    
+
     function Write-Warning {
         param([string]$Message)
-        Write-Host "  ⚠ $Message" -ForegroundColor Yellow
+        Write-Color "  $global:CbitWarnGlyph $Message" 'Warn'
     }
-    
+
     function Write-Info {
         param([string]$Message)
-        Write-Host "  ℹ $Message" -ForegroundColor Cyan
+        Write-Color "  ℹ $Message" 'Detail'
     }
     
     function Get-SafeDNS {
@@ -123,10 +123,10 @@ function Test-EmailAuthentication {
     # Main Header
     # ══════════════════════════════════════════════════════════════════════════
     
-    Write-Host "`n═══════════════════════════════════════════════════════════" -ForegroundColor Cyan
-    Write-Host "  Email Authentication Check: $Domain" -ForegroundColor Cyan
-    Write-Host "═══════════════════════════════════════════════════════════" -ForegroundColor Cyan
-    
+    Write-Color "`n═══════════════════════════════════════════════════════════" 'Header'
+    Write-Color "  Email Authentication Check: $Domain" 'Header'
+    Write-Color "═══════════════════════════════════════════════════════════" 'Header'
+
     # ══════════════════════════════════════════════════════════════════════════
     # MX Records
     # ══════════════════════════════════════════════════════════════════════════
@@ -182,7 +182,7 @@ function Test-EmailAuthentication {
         
         if ($spfRecord) {
             Write-Success "SPF record found"
-            Write-Host "    $spfRecord" -ForegroundColor Gray
+            Write-Color "    $spfRecord" 'Detail'
             
             $results.SPF.Found = $true
             $results.SPF.Record = $spfRecord
@@ -205,14 +205,14 @@ function Test-EmailAuthentication {
             
             # Show all policy
             $allPolicy = switch ($mechanisms['all']) {
-                '-' { "FAIL (hard fail - rejects unauthorized mail)"; 'Green'; break }
-                '~' { "SOFTFAIL (flags but doesn't reject)"; 'Yellow'; break }
-                '+' { "PASS (allows all - not recommended!)"; 'Red'; break }
-                '?' { "NEUTRAL (no policy)"; 'Red'; break }
-                default { "NOT SPECIFIED"; 'Red' }
+                '-' { "FAIL (hard fail - rejects unauthorized mail)"; 'Good'; break }
+                '~' { "SOFTFAIL (flags but doesn't reject)"; 'Warn'; break }
+                '+' { "PASS (allows all - not recommended!)"; 'Bad'; break }
+                '?' { "NEUTRAL (no policy)"; 'Bad'; break }
+                default { "NOT SPECIFIED"; 'Bad' }
             }
-            
-            Write-Host "    Policy: $($allPolicy[0])" -ForegroundColor $allPolicy[1]
+
+            Write-Color "    Policy: $($allPolicy[0])" $allPolicy[1]
             
             # DNS lookup count warning
             $lookupCount = ($mechanisms['include:'].Count + 
@@ -245,7 +245,7 @@ function Test-EmailAuthentication {
         
         if ($dmarcRecord) {
             Write-Success "DMARC record found"
-            Write-Host "    $dmarcRecord" -ForegroundColor Gray
+            Write-Color "    $dmarcRecord" 'Detail'
             
             $results.DMARC.Found = $true
             $results.DMARC.Record = $dmarcRecord
@@ -256,13 +256,13 @@ function Test-EmailAuthentication {
                 $results.DMARC.Policy = $policy
                 
                 $policyDesc = switch ($policy) {
-                    'none'       { "MONITOR ONLY (no enforcement)"; 'Yellow'; break }
-                    'quarantine' { "QUARANTINE (suspicious mail to spam)"; 'Cyan'; break }
-                    'reject'     { "REJECT (blocks unauthorized mail)"; 'Green'; break }
-                    default      { "UNKNOWN"; 'Red' }
+                    'none'       { "MONITOR ONLY (no enforcement)"; 'Warn'; break }
+                    'quarantine' { "QUARANTINE (suspicious mail to spam)"; ''; break }
+                    'reject'     { "REJECT (blocks unauthorized mail)"; 'Good'; break }
+                    default      { "UNKNOWN"; 'Bad' }
                 }
-                
-                Write-Host "    Policy: $($policyDesc[0])" -ForegroundColor $policyDesc[1]
+
+                Write-Color "    Policy: $($policyDesc[0])" $policyDesc[1]
             }
             
             # Parse percentage
@@ -332,7 +332,7 @@ function Test-EmailAuthentication {
                 } else {
                     $dkimRecord
                 }
-                Write-Host "    $displayKey" -ForegroundColor Gray
+                Write-Color "    $displayKey" 'Detail'
                 
                 $results.DKIM.Found = $true
                 $results.DKIM.Selector = $selector
@@ -377,7 +377,7 @@ function Test-EmailAuthentication {
         
         if ($bimiRecord) {
             Write-Success "BIMI record found"
-            Write-Host "    $bimiRecord" -ForegroundColor Gray
+            Write-Color "    $bimiRecord" 'Detail'
             
             $results.BIMI.Found = $true
             $results.BIMI.Record = $bimiRecord
@@ -417,7 +417,7 @@ function Test-EmailAuthentication {
             
             if ($mtaStsRecord) {
                 Write-Success "MTA-STS record found"
-                Write-Host "    $mtaStsRecord" -ForegroundColor Gray
+                Write-Color "    $mtaStsRecord" 'Detail'
                 
                 $results.MTA_STS.Found = $true
                 $results.MTA_STS.Record = $mtaStsRecord
@@ -447,9 +447,9 @@ function Test-EmailAuthentication {
     # Summary & Recommendations
     # ══════════════════════════════════════════════════════════════════════════
     
-    Write-Host "`n═══════════════════════════════════════════════════════════" -ForegroundColor Cyan
-    Write-Host "  Security Summary" -ForegroundColor Cyan
-    Write-Host "═══════════════════════════════════════════════════════════" -ForegroundColor Cyan
+    Write-Color "`n═══════════════════════════════════════════════════════════" 'Header'
+    Write-Color "  Security Summary" 'Header'
+    Write-Color "═══════════════════════════════════════════════════════════" 'Header'
     
     $score = 0
     $maxScore = 4
@@ -459,35 +459,35 @@ function Test-EmailAuthentication {
     if ($results.DKIM.Found) { $score++ }
     if ($results.DMARC.Found) { $score++ }
     
-    Write-Host "`nSecurity Score: $score / $maxScore" -ForegroundColor $(
-        if ($score -eq $maxScore) { 'Green' }
-        elseif ($score -ge 3) { 'Yellow' }
-        else { 'Red' }
+    Write-Color "`nSecurity Score: $score / $maxScore" $(
+        if ($score -eq $maxScore) { 'Good' }
+        elseif ($score -ge 3) { 'Warn' }
+        else { 'Bad' }
     )
-    
-    Write-Host "`nConfiguration Status:" -ForegroundColor White
-    Write-Host "  MX:    $(if ($results.MX.Count -gt 0) { '✔' } else { '✖' })" -ForegroundColor $(if ($results.MX.Count -gt 0) { 'Green' } else { 'Red' })
-    Write-Host "  SPF:   $(if ($results.SPF.Found) { '✔' } else { '✖' })" -ForegroundColor $(if ($results.SPF.Found) { 'Green' } else { 'Red' })
-    Write-Host "  DKIM:  $(if ($results.DKIM.Found) { '✔' } else { '✖' })" -ForegroundColor $(if ($results.DKIM.Found) { 'Green' } else { 'Red' })
-    Write-Host "  DMARC: $(if ($results.DMARC.Found) { '✔' } else { '✖' })" -ForegroundColor $(if ($results.DMARC.Found) { 'Green' } else { 'Red' })
-    Write-Host "  BIMI:  $(if ($results.BIMI.Found) { '✔' } else { '○' })" -ForegroundColor $(if ($results.BIMI.Found) { 'Green' } else { 'Gray' }) -NoNewline
-    Write-Host " (optional)" -ForegroundColor Gray
-    
+
+    Write-Color "`nConfiguration Status:" 'Header'
+    Write-Color "  MX:    $(if ($results.MX.Count -gt 0) { $global:CbitCheck } else { $global:CbitCross })" $(if ($results.MX.Count -gt 0) { 'Good' } else { 'Bad' })
+    Write-Color "  SPF:   $(if ($results.SPF.Found) { $global:CbitCheck } else { $global:CbitCross })" $(if ($results.SPF.Found) { 'Good' } else { 'Bad' })
+    Write-Color "  DKIM:  $(if ($results.DKIM.Found) { $global:CbitCheck } else { $global:CbitCross })" $(if ($results.DKIM.Found) { 'Good' } else { 'Bad' })
+    Write-Color "  DMARC: $(if ($results.DMARC.Found) { $global:CbitCheck } else { $global:CbitCross })" $(if ($results.DMARC.Found) { 'Good' } else { 'Bad' })
+    Write-Color "  BIMI:  $(if ($results.BIMI.Found) { $global:CbitCheck } else { '○' })" $(if ($results.BIMI.Found) { 'Good' } else { 'Detail' }) -NoNewline
+    Write-Color " (optional)" 'Detail'
+
     # Recommendations
     if ($score -lt $maxScore) {
-        Write-Host "`nRecommendations:" -ForegroundColor Yellow
-        
+        Write-Color "`nRecommendations:" 'Header'
+
         if (-not $results.SPF.Found) {
-            Write-Host "  • Configure SPF to authorize mail servers" -ForegroundColor White
+            Write-Host "  • Configure SPF to authorize mail servers"
         }
         if (-not $results.DKIM.Found) {
-            Write-Host "  • Enable DKIM to sign outgoing messages" -ForegroundColor White
+            Write-Host "  • Enable DKIM to sign outgoing messages"
         }
         if (-not $results.DMARC.Found) {
-            Write-Host "  • Implement DMARC for authentication and reporting" -ForegroundColor White
+            Write-Host "  • Implement DMARC for authentication and reporting"
         }
         if ($results.DMARC.Found -and $results.DMARC.Policy -eq 'none') {
-            Write-Host "  • Upgrade DMARC policy from 'none' to 'quarantine' or 'reject'" -ForegroundColor White
+            Write-Host "  • Upgrade DMARC policy from 'none' to 'quarantine' or 'reject'"
         }
     }
     
@@ -500,7 +500,7 @@ function Test-EmailAuthentication {
     if ($ExportResults) {
         $exportPath = "email-auth-$Domain-$(Get-Date -Format 'yyyyMMdd-HHmmss').json"
         $results | ConvertTo-Json -Depth 5 | Set-Content $exportPath
-        Write-Host "✔ Results exported to: $exportPath" -ForegroundColor Green
+        Write-Color "$global:CbitCheck Results exported to: $exportPath" 'Good'
     }
     
     # Store in global variable for easy access

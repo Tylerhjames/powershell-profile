@@ -2,14 +2,14 @@ function Get-ClipLength {
     try {
         $text = Get-Clipboard -Raw
         if (-not $text) {
-            Write-Host "📋 Clipboard is empty" -ForegroundColor DarkYellow
+            Write-Color "📋 Clipboard is empty" 'Warn'
             return
         }
 
         $length = $text.Length
-        Write-Host "📋 Clipboard contains $length characters" -ForegroundColor Cyan
+        Write-Color "📋 Clipboard contains $length characters"
     }
     catch {
-        Write-Host "⚠ Unable to read clipboard content" -ForegroundColor Yellow
+        Write-Color "$global:CbitWarnGlyph Unable to read clipboard content" 'Warn'
     }
 }
