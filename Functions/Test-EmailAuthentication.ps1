@@ -78,28 +78,50 @@ function Test-EmailAuthentication {
     # Helper Functions
     # ══════════════════════════════════════════════════════════════════════════
     
+    # Per-section severity tracking: the summary derives each section's status
+    # from the WORST finding emitted in that section (Fail > Warn > OK/Info),
+    # not from "a record exists" — so a ✗ detail line can never sit under a
+    # ✓ summary. Hashtable contents are mutable from nested function scopes.
+    $SectionState = @{ Current = $null; Worst = @{} }
+    $SeverityRank = @{ OK = 0; Info = 0; Warn = 1; Fail = 2 }
+
+    function Set-SectionSeverity {
+        param([string]$Level)
+        $s = $SectionState.Current
+        if (-not $s) { return }
+        $r = $SeverityRank[$Level]
+        if (-not $SectionState.Worst.ContainsKey($s) -or $r -gt $SectionState.Worst[$s]) {
+            $SectionState.Worst[$s] = $r
+        }
+    }
+
     function Write-SectionHeader {
         param([string]$Title)
+        $SectionState.Current = ($Title -split '[ (]')[0]
         Write-Color "`n[$Title]" 'Header'
     }
 
     function Write-Success {
         param([string]$Message)
+        Set-SectionSeverity 'OK'
         Write-Color "  $global:CbitCheck $Message" 'Good'
     }
 
     function Write-Failure {
         param([string]$Message)
+        Set-SectionSeverity 'Fail'
         Write-Color "  $global:CbitCross $Message" 'Bad'
     }
 
     function Write-Warning {
         param([string]$Message)
+        Set-SectionSeverity 'Warn'
         Write-Color "  $global:CbitWarnGlyph $Message" 'Warn'
     }
 
     function Write-Info {
         param([string]$Message)
+        Set-SectionSeverity 'Info'
         Write-Color "  ℹ $Message" 'Detail'
     }
     
@@ -118,7 +140,29 @@ function Test-EmailAuthentication {
             return $null
         }
     }
-    
+
+    function Get-RsaKeyBits {
+        # Classify RSA key size from the base64 p= tag by DECODED DER byte
+        # length. String-length heuristics undercount: DNS TXT records split
+        # into 255-byte character-strings (RFC 1035), and a 2048-bit key's
+        # ~392-char p= value ALWAYS spans two strings.
+        param([string]$Base64Key)
+        try {
+            $len = [Convert]::FromBase64String($Base64Key).Length
+            if     ($len -ge 520) { 4096 }
+            elseif ($len -ge 270) { 2048 }
+            elseif ($len -ge 140) { 1024 }
+            else                  { 0 }
+        } catch { 0 }
+    }
+
+    function Get-DkimPValue {
+        # Extract the base64 p= value from a rejoined DKIM TXT record
+        param([string]$DkimRecord)
+        $tag = ($DkimRecord -split ';').Trim() | Where-Object { $_ -match '^p=' } | Select-Object -First 1
+        if ($tag) { ($tag -replace '^p=') -replace '\s' } else { '' }
+    }
+
     # ══════════════════════════════════════════════════════════════════════════
     # Main Header
     # ══════════════════════════════════════════════════════════════════════════
@@ -213,6 +257,7 @@ function Test-EmailAuthentication {
             }
 
             Write-Color "    Policy: $($allPolicy[0])" $allPolicy[1]
+            Set-SectionSeverity $(switch ($allPolicy[1]) { 'Bad' { 'Fail' } 'Warn' { 'Warn' } default { 'OK' } })
             
             # DNS lookup count warning
             $lookupCount = ($mechanisms['include:'].Count + 
@@ -263,6 +308,7 @@ function Test-EmailAuthentication {
                 }
 
                 Write-Color "    Policy: $($policyDesc[0])" $policyDesc[1]
+                Set-SectionSeverity $(switch ($policyDesc[1]) { 'Bad' { 'Fail' } 'Warn' { 'Warn' } default { 'OK' } })
             }
             
             # Parse percentage
@@ -299,11 +345,13 @@ function Test-EmailAuthentication {
     Write-SectionHeader "DKIM (DomainKeys Identified Mail)"
     
     # Determine selectors to test
+    $m365Mode = $false
     if ($DKIMSelectors) {
         $selectors = $DKIMSelectors
     }
     elseif ($results.SPF.Platform -match 'Microsoft|365') {
         $selectors = @('selector1', 'selector2')
+        $m365Mode = $true
         Write-Info "Testing Microsoft 365 selectors"
     }
     elseif ($results.SPF.Platform -match 'Google') {
@@ -315,79 +363,114 @@ function Test-EmailAuthentication {
         Write-Info "Testing common DKIM selectors"
     }
     
-    # Check ALL selectors — paired keys (e.g. M365 selector1/selector2) must both
-    # exist or key rotation silently breaks when the provider flips to the
-    # missing selector. No early break.
     $foundSelectors = @()
 
-    foreach ($selector in $selectors) {
-        try {
+    if ($m365Mode) {
+        # M365 publishes the DKIM public key only for the ACTIVE selector; the
+        # inactive selector's CNAME resolves but carries no TXT until the next
+        # rotation publishes it (signing flips ~96h later). CNAME and TXT are
+        # therefore separate failure domains: the customer owns the two CNAMEs
+        # in their zone, Microsoft owns the terminal TXT. Receivers only ever
+        # query the selector named in the s= header of actual mail.
+        foreach ($selector in $selectors) {
             $dkimName = "$selector._domainkey.$Domain"
-            $dkimRecords = Get-SafeDNS -Name $dkimName -Type TXT
-            $dkimRecord = $dkimRecords.Strings -join ""
+            $cname = Get-SafeDNS -Name $dkimName -Type CNAME | Where-Object Type -eq 'CNAME'
+            $txt   = Get-SafeDNS -Name $dkimName -Type TXT   | Where-Object Type -eq 'TXT'
 
-            if ($dkimRecord -match "v=DKIM1") {
-                Write-Success "DKIM found (selector: $selector)"
+            # Rejoin 255-byte TXT splits before parsing (RFC 1035)
+            $dkimRecord = if ($txt) { ($txt | Select-Object -First 1).Strings -join '' } else { '' }
 
-                # Truncate very long keys for display
-                $displayKey = if ($dkimRecord.Length -gt 100) {
-                    "$($dkimRecord.Substring(0, 97))..."
-                } else {
-                    $dkimRecord
+            if ($dkimRecord -match 'v=DKIM1') {
+                $bits = Get-RsaKeyBits (Get-DkimPValue $dkimRecord)
+                if ($bits -ge 2048) {
+                    Write-Success "$selector signing key found - RSA $bits-bit"
                 }
-                Write-Color "    $displayKey" 'Detail'
-
+                elseif ($bits -gt 0) {
+                    Write-Warning "$selector key is RSA $bits-bit - below 2048"
+                }
+                else {
+                    Write-Warning "$selector key found but size unknown (p= tag missing or malformed)"
+                }
+                if (-not $cname) {
+                    Write-Warning "$selector published as direct TXT - unsupported for M365, key rotation unmanaged"
+                }
+                $foundSelectors += $selector
                 $results.DKIM.Found = $true
                 if (-not $results.DKIM.Record) { $results.DKIM.Record = $dkimRecord }
-
-                # Analyze key strength
-                if ($dkimRecord -match 'k=rsa') {
-                    Write-Info "Key type: RSA"
-
-                    # Estimate key size (rough estimate from base64 length)
-                    if ($dkimRecord.Length -gt 500) {
-                        Write-Success "Strong key (likely 2048+ bit)"
-                    } else {
-                        Write-Warning "Weak key (likely 1024 bit or less)"
-                    }
-                }
-
-                $foundSelectors += $selector
+            }
+            elseif ($cname) {
+                Write-Info "$selector inactive - key unpublished until rotation (normal for M365)"
+            }
+            else {
+                Write-Failure "$selector CNAME missing - publish it; blocks DKIM key rotation"
             }
         }
-        catch {
-            # Selector not found, continue to next
+
+        if ($foundSelectors.Count -eq 0) {
+            Write-Failure "No selector resolves to a key - domain is not DKIM signing"
         }
-    }
-
-    $results.DKIM.Selector = $foundSelectors -join ', '
-
-    if ($foundSelectors.Count -eq 0) {
-        Write-Failure "DKIM record NOT found"
-        Write-Info "Tested selectors: $($selectors -join ', ')"
-        Write-Info "You may need to specify custom selectors with -DKIMSelectors"
     }
     else {
-        # Paired-selector completeness: M365 (selector1/selector2) and generic
-        # k1/k2 rotate between two keys — having only one is a latent failure.
-        foreach ($pair in @(@('selector1', 'selector2'), @('k1', 'k2'))) {
-            $inScope = @($pair | Where-Object { $selectors -contains $_ })
-            if ($inScope.Count -eq 2) {
-                $missing = @($pair | Where-Object { $foundSelectors -notcontains $_ })
-                if ($missing.Count -eq 1) {
-                    Write-Failure "DKIM selector pair incomplete: '$($missing[0])' not found"
-                    Write-Info "Both keys must resolve - mail will fail DKIM when the provider rotates to the missing selector"
+        # Non-M365 platforms: every published selector is expected to carry a
+        # key, so absence of a TXT is simply "not found" — the M365
+        # inactive-selector downgrade does not apply here.
+        foreach ($selector in $selectors) {
+            try {
+                $dkimName = "$selector._domainkey.$Domain"
+                $dkimRecords = Get-SafeDNS -Name $dkimName -Type TXT
+                $dkimRecord = ($dkimRecords | Where-Object Type -eq 'TXT' | Select-Object -First 1).Strings -join ''
+
+                if ($dkimRecord -match "v=DKIM1") {
+                    Write-Success "DKIM found (selector: $selector)"
+
+                    # Truncate very long keys for display
+                    $displayKey = if ($dkimRecord.Length -gt 100) {
+                        "$($dkimRecord.Substring(0, 97))..."
+                    } else {
+                        $dkimRecord
+                    }
+                    Write-Color "    $displayKey" 'Detail'
+
+                    $results.DKIM.Found = $true
+                    if (-not $results.DKIM.Record) { $results.DKIM.Record = $dkimRecord }
+
+                    # Analyze key strength by decoded DER length of the p= tag
+                    if ($dkimRecord -match 'k=rsa|p=') {
+                        $bits = Get-RsaKeyBits (Get-DkimPValue $dkimRecord)
+                        if ($bits -ge 2048) {
+                            Write-Success "Key strength: RSA $bits-bit"
+                        }
+                        elseif ($bits -gt 0) {
+                            Write-Warning "Weak key: RSA $bits-bit - below 2048"
+                        }
+                        else {
+                            Write-Warning "Key size unknown (p= tag missing or malformed)"
+                        }
+                    }
+
+                    $foundSelectors += $selector
                 }
             }
+            catch {
+                # Selector not found, continue to next
+            }
         }
-        # User-specified selectors: report any that didn't resolve
-        if ($DKIMSelectors) {
+
+        if ($foundSelectors.Count -eq 0) {
+            Write-Failure "DKIM record NOT found"
+            Write-Info "Tested selectors: $($selectors -join ', ')"
+            Write-Info "You may need to specify custom selectors with -DKIMSelectors"
+        }
+        elseif ($DKIMSelectors) {
+            # User-specified selectors: report any that didn't resolve
             $notFound = @($DKIMSelectors | Where-Object { $foundSelectors -notcontains $_ })
             if ($notFound.Count -gt 0) {
                 Write-Warning "Specified selector(s) not found: $($notFound -join ', ')"
             }
         }
     }
+
+    $results.DKIM.Selector = $foundSelectors -join ', '
     
     # ══════════════════════════════════════════════════════════════════════════
     # BIMI Record
@@ -475,14 +558,29 @@ function Test-EmailAuthentication {
     Write-Color "  Security Summary" 'Header'
     Write-Color "═══════════════════════════════════════════════════════════" 'Header'
     
+    # Section status = worst finding emitted in that section, not mere record
+    # existence — a ✗ or ⚠ in the detail lines surfaces here.
+    function Get-SectionStatus {
+        param([string]$Key, [bool]$Found)
+        $worst = if ($SectionState.Worst.ContainsKey($Key)) { $SectionState.Worst[$Key] } else { 0 }
+        if (-not $Found -or $worst -ge 2) { ,@($global:CbitCross, 'Bad') }
+        elseif ($worst -eq 1)             { ,@($global:CbitWarnGlyph, 'Warn') }
+        else                              { ,@($global:CbitCheck, 'Good') }
+    }
+
+    $status = @{
+        MX    = Get-SectionStatus 'MX'    ($results.MX.Count -gt 0)
+        SPF   = Get-SectionStatus 'SPF'   $results.SPF.Found
+        DKIM  = Get-SectionStatus 'DKIM'  $results.DKIM.Found
+        DMARC = Get-SectionStatus 'DMARC' $results.DMARC.Found
+    }
+
     $score = 0
     $maxScore = 4
-    
-    if ($results.MX.Count -gt 0) { $score++ }
-    if ($results.SPF.Found) { $score++ }
-    if ($results.DKIM.Found) { $score++ }
-    if ($results.DMARC.Found) { $score++ }
-    
+    foreach ($k in 'MX', 'SPF', 'DKIM', 'DMARC') {
+        if ($status[$k][1] -ne 'Bad') { $score++ }
+    }
+
     Write-Color "`nSecurity Score: $score / $maxScore" $(
         if ($score -eq $maxScore) { 'Good' }
         elseif ($score -ge 3) { 'Warn' }
@@ -490,10 +588,10 @@ function Test-EmailAuthentication {
     )
 
     Write-Color "`nConfiguration Status:" 'Header'
-    Write-Color "  MX:    $(if ($results.MX.Count -gt 0) { $global:CbitCheck } else { $global:CbitCross })" $(if ($results.MX.Count -gt 0) { 'Good' } else { 'Bad' })
-    Write-Color "  SPF:   $(if ($results.SPF.Found) { $global:CbitCheck } else { $global:CbitCross })" $(if ($results.SPF.Found) { 'Good' } else { 'Bad' })
-    Write-Color "  DKIM:  $(if ($results.DKIM.Found) { $global:CbitCheck } else { $global:CbitCross })" $(if ($results.DKIM.Found) { 'Good' } else { 'Bad' })
-    Write-Color "  DMARC: $(if ($results.DMARC.Found) { $global:CbitCheck } else { $global:CbitCross })" $(if ($results.DMARC.Found) { 'Good' } else { 'Bad' })
+    Write-Color "  MX:    $($status.MX[0])"    $status.MX[1]
+    Write-Color "  SPF:   $($status.SPF[0])"   $status.SPF[1]
+    Write-Color "  DKIM:  $($status.DKIM[0])"  $status.DKIM[1]
+    Write-Color "  DMARC: $($status.DMARC[0])" $status.DMARC[1]
     Write-Color "  BIMI:  $(if ($results.BIMI.Found) { $global:CbitCheck } else { '○' })" $(if ($results.BIMI.Found) { 'Good' } else { 'Detail' }) -NoNewline
     Write-Color " (optional)" 'Detail'
 
