@@ -752,55 +752,63 @@ function Scan-Network {
     Write-Color "    • & `$Global:CopyIPs    - Copy all IPs to clipboard" 'Header'
     Write-Color "    • & `$Global:CopyMACs   - Copy all MAC addresses to clipboard`n" 'Header'
     
-    # Open in GridView, then offer copy/open actions on the selected row(s).
-    # Out-GridView is read-only (no double-click/per-cell copy), so -PassThru returns
-    # the selected rows on OK and we act on them from the console. Closing the window
-    # (Cancel/X) returns nothing and exits the loop.
-    Write-Color "🔎 Opening results in GridView (filter, select row(s) + OK for copy/open actions; Ctrl+C copies whole rows)..." 'Detail'
+    # Keep the selected rows until the operator explicitly returns to the grid.
+    # A blank response (including a stray Enter after OK) must not reopen it.
+    function Show-ScanSelectionActions {
+        param([object[]]$Results, [string]$Network)
 
-    while ($true) {
-        $selected = $results | Out-GridView -PassThru -Title "Network Scan Results - $($selectedInterface.CIDR) | Found: $($results.Count) hosts | Select row(s) + OK for actions"
-        if (-not $selected) { break }   # window closed / cancelled
+        Write-Color 'Opening results in GridView. Select row(s) and click OK for actions.' 'Detail'
+        :selectHosts while ($true) {
+            $selected = @($Results | Out-GridView -PassThru -Title "Network Scan Results - $Network | Found: $($Results.Count) hosts | Select row(s) + OK for actions")
+            if ($selected.Count -eq 0) { return }
 
-        Write-Color "`nSelected $($selected.Count) host(s):" 'Header'
-        $selected | ForEach-Object { Write-Color "    • $($_.IPAddress)  $($_.Hostname)  $($_.MAC)" }
+            Write-Color "`nSelected $($selected.Count) host(s):" 'Header'
+            $selected | ForEach-Object { Write-Color "    $($_.IPAddress)  $($_.Hostname)  $($_.MAC)" }
 
-        Write-Color "`nActions:" 'Header'
-        Write-Color "  [1] Copy MAC(s) to clipboard"
-        Write-Color "  [2] Copy IP(s) to clipboard"
-        Write-Color "  [3] Open web interface(s) in browser"
-        Write-Color "  [B] Back to grid    [Q] Done" 'Detail'
-        $action = Read-Host "Choose"
+            :chooseAction while ($true) {
+                Write-Color "`nActions for the selected host(s):" 'Header'
+                Write-Color '  [1] Copy MAC(s) to clipboard'
+                Write-Color '  [2] Copy IP(s) to clipboard'
+                Write-Color '  [3] Open web interface(s) in browser'
+                Write-Color '  [B] Back to grid    [Q] Done' 'Detail'
+                $action = ([string](Read-Host 'Choose (1, 2, 3, B, or Q)')).Trim().ToUpperInvariant()
 
-        switch -Regex ($action) {
-            '^1$' {
-                $macs = $selected.MAC | Where-Object { $_ }
-                if ($macs) {
-                    $macs | Set-Clipboard
-                    Write-Color "$global:CbitCheck Copied $($macs.Count) MAC(s) to clipboard" 'Good'
-                } else {
-                    Write-Color "$global:CbitWarnGlyph No MAC addresses on the selected host(s)" 'Warn'
+                switch ($action) {
+                    '1' {
+                        $macs = @($selected.MAC | Where-Object { $_ })
+                        if ($macs.Count -gt 0) {
+                            $macs | Set-Clipboard
+                            Write-Color "$global:CbitCheck Copied $($macs.Count) MAC(s) to clipboard" 'Good'
+                        }
+                        else { Write-Color "$global:CbitWarnGlyph No MAC addresses on the selected host(s)" 'Warn' }
+                    }
+                    '2' {
+                        $ipList = @($selected.IPAddress | Where-Object { $_ })
+                        if ($ipList.Count -gt 0) {
+                            $ipList | Set-Clipboard
+                            Write-Color "$global:CbitCheck Copied $($ipList.Count) IP(s) to clipboard" 'Good'
+                        }
+                        else { Write-Color "$global:CbitWarnGlyph No IP addresses on the selected host(s)" 'Warn' }
+                    }
+                    '3' {
+                        if ($selected.Count -gt 5) {
+                            $ok = ([string](Read-Host "This opens $($selected.Count) browser tabs. Continue? (Y/N)")).Trim()
+                            if ($ok -notmatch '^(?i:y|yes)$') { continue chooseAction }
+                        }
+                        foreach ($device in $selected) {
+                            $url = Get-HostUrl -HostObj $device
+                            Write-Color "Opening $url"
+                            Start-Process $url
+                        }
+                    }
+                    'B' { continue selectHosts }
+                    'Q' { return }
+                    '' { continue chooseAction }
+                    default { Write-Color 'Choose 1, 2, 3, B, or Q.' 'Warn' }
                 }
             }
-            '^2$' {
-                $ipList = $selected.IPAddress | Where-Object { $_ }
-                $ipList | Set-Clipboard
-                Write-Color "$global:CbitCheck Copied $($ipList.Count) IP(s) to clipboard" 'Good'
-            }
-            '^3$' {
-                if ($selected.Count -gt 5) {
-                    $ok = Read-Host "This opens $($selected.Count) browser tabs. Continue? (Y/N)"
-                    if ($ok -notmatch '^y') { continue }
-                }
-                foreach ($h in $selected) {
-                    $url = Get-HostUrl -HostObj $h
-                    Write-Color "🌐 Opening $url"
-                    Start-Process $url
-                }
-            }
-            '^[Bb]$' { continue }
-            '^[Qq]$' { break }
-            default  { Write-Color "Invalid choice." 'Bad' }
         }
     }
+
+    Show-ScanSelectionActions -Results $results -Network $selectedInterface.CIDR
 }
