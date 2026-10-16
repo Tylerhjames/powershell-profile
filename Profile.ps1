@@ -139,7 +139,7 @@ if (Test-Path $functionsPath) {
     foreach ($f in @(
         'Get-ClipLength.ps1', 'npp.ps1',
         'renew-safe.ps1', 'test-site.ps1',
-        'Repair-Winget.ps1'
+        'Repair-Winget.ps1', 'ssh.ps1', 'Initialize-RoamingSsh.ps1'
     )) {
         $fp = Join-Path $functionsPath $f
         if (Test-Path $fp) { . $fp }
