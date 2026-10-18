@@ -41,8 +41,9 @@ function global:Initialize-RoamingSsh {
     $gitSsh = Get-ProfileGitSsh
     if (-not $gitSsh) { throw 'Git for Windows OpenSSH is required for resident-key import.' }
     $keygen = Join-Path (Split-Path $gitSsh -Parent) 'ssh-keygen.exe'
-    $name = if ($ImportKey -eq 'Nano') { 'id_tyler_5cnano_resident' } else { 'id_tyler_5nfc_resident' }
-    $expected = if ($ImportKey -eq 'Nano') { 'SHA256:4i1Rjisp469kzCb4ZdqwCY3rPopj7Yu2d6m3Z6Ynu1s' } else { 'SHA256:mt+unzaPxJS88nvCqkBtZVe/ovTRG56IZSsFdcSSJWg' }
+    $name = if ($ImportKey -eq 'Nano') { 'id_tyler_5cnano' } else { 'id_tyler_5cnfc' }
+    $publicLabel = if ($ImportKey -eq 'Nano') { 'tyler-5cnano' } else { 'tyler-5cnfc' }
+    $expected = if ($ImportKey -eq 'Nano') { 'SHA256:Y7WxfPgXN37X8FhrXzBUNaa8vLmaYnKm19BxHkUMOf0' } else { 'SHA256:QsJMtJGoabxp1a9/PABQ3S9dsxSPhyRIdFYT2ncIfmw' }
     $target = Join-Path $sshDir $name
     if ((Test-Path -LiteralPath $target) -or (Test-Path -LiteralPath "$target.pub")) {
         throw "Identity already exists: $target. Preserved without overwriting; use ssh -G arca to inspect configuration."
@@ -64,11 +65,16 @@ function global:Initialize-RoamingSsh {
         })
         if ($matches.Count -ne 1) { throw "Expected exactly one matching $ImportKey identity; found $($matches.Count). Files retained at $importDir" }
         $handle = $matches[0].FullName.Substring(0, $matches[0].FullName.Length - 4)
+        # Resident recovery uses the FIDO application as its public comment.
+        # Normalize the exported label without altering key material/fingerprint.
+        $publicParts = ([IO.File]::ReadAllText($matches[0].FullName).Trim() -split '\s+', 3)
+        [IO.File]::WriteAllText($matches[0].FullName, "$($publicParts[0]) $($publicParts[1]) $publicLabel`n", [Text.UTF8Encoding]::new($false))
         # File.Copy refuses an existing destination, including concurrent changes.
         [IO.File]::Copy($handle, $target, $false)
         [IO.File]::Copy($matches[0].FullName, "$target.pub", $false)
         Write-Host "Verified and imported $ImportKey identity: $target"
-        Write-Host "Recovery copies retained at $importDir. Test with: ssh arca"
+        $testAlias = if ($ImportKey -eq 'Nano') { 'arca' } else { 'arca2' }
+        Write-Host "Recovery copies retained at $importDir. Test with: ssh $testAlias"
     } finally {
         $env:PATH = $savedPath
         Pop-Location

@@ -66,15 +66,25 @@ override has been removed so these shared settings control both servers.
 
 ## Identities
 
+Public-key comments are standardized to `tyler-5cnano` (arca/proxy) and
+`tyler-5cnfc` (arca2/proxy2). The importer applies these labels to the `.pub`
+files on new computers. The on-key FIDO application names are now
+`ssh:tyler-5cnano` and `ssh:tyler-5cnfc`. These required new credentials and
+fingerprints; changing only a public-key comment would not rename the on-key application.
+The obsolete PIN-required NFC fingerprint is
+`SHA256:91agEQ1Vn6/lF3QVAon1oDnOg9D1Gumzd7y/WEpKTNQ`; it is not either active key below.
+
 | Key | Local filename | Verified public fingerprint |
 | --- | --- | --- |
-| Nano resident | `id_tyler_5cnano_resident` | `SHA256:4i1Rjisp469kzCb4ZdqwCY3rPopj7Yu2d6m3Z6Ynu1s` |
-| NFC resident | `id_tyler_5nfc_resident` | `SHA256:mt+unzaPxJS88nvCqkBtZVe/ovTRG56IZSsFdcSSJWg` |
+| Nano resident | `id_tyler_5cnano` | `SHA256:Y7WxfPgXN37X8FhrXzBUNaa8vLmaYnKm19BxHkUMOf0` |
+| NFC resident | `id_tyler_5cnfc` | `SHA256:QsJMtJGoabxp1a9/PABQ3S9dsxSPhyRIdFYT2ncIfmw` |
 
-The replacement NFC credential was created without `verify-required`, recovered
-from the key, and successfully used as the sole identity to log in as `tyler` on
-both servers. The old `id_tyler_5nfc` file is retained locally for rollback; the
-NFC aliases and import command now select only the replacement.
+Both named credentials were created without `verify-required`, recovered from
+their respective keys, and tested as sole identities for `tyler` on both servers.
+The user confirmed selection/touch only, with no PIN or file passphrase at login.
+Enrollment and recovery still require the FIDO2 PIN. Older credentials, local
+identity files, and existing server authorizations were preserved during this
+migration; their cleanup is separate. Aliases and import now select the named keys.
 
 The old Nano identity `id_ed25519_sk` is retained locally for rollback/other
 servers. Its old Arca authorization is retired separately after successful tests.
