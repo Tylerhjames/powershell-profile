@@ -41,8 +41,8 @@ function global:Initialize-RoamingSsh {
     $gitSsh = Get-ProfileGitSsh
     if (-not $gitSsh) { throw 'Git for Windows OpenSSH is required for resident-key import.' }
     $keygen = Join-Path (Split-Path $gitSsh -Parent) 'ssh-keygen.exe'
-    $name = if ($ImportKey -eq 'Nano') { 'id_tyler_5cnano_resident' } else { 'id_tyler_5nfc' }
-    $expected = if ($ImportKey -eq 'Nano') { 'SHA256:4i1Rjisp469kzCb4ZdqwCY3rPopj7Yu2d6m3Z6Ynu1s' } else { 'SHA256:91agEQ1Vn6/lF3QVAon1oDnOg9D1Gumzd7y/WEpKTNQ' }
+    $name = if ($ImportKey -eq 'Nano') { 'id_tyler_5cnano_resident' } else { 'id_tyler_5nfc_resident' }
+    $expected = if ($ImportKey -eq 'Nano') { 'SHA256:4i1Rjisp469kzCb4ZdqwCY3rPopj7Yu2d6m3Z6Ynu1s' } else { 'SHA256:mt+unzaPxJS88nvCqkBtZVe/ovTRG56IZSsFdcSSJWg' }
     $target = Join-Path $sshDir $name
     if ((Test-Path -LiteralPath $target) -or (Test-Path -LiteralPath "$target.pub")) {
         throw "Identity already exists: $target. Preserved without overwriting; use ssh -G arca to inspect configuration."
