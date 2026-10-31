@@ -150,6 +150,12 @@ function Show-TechMenu {
             }
             Icon        = "📋"
         }
+        @{
+            Name        = "SSH & YubiKey Setup"
+            Description = "Hosts, key import, test & publish"
+            Command     = { Manage-RoamingSsh }
+            Icon        = "🔑"
+        }
     )
     
     # ══════════════════════════════════════════════════════════════════════════
