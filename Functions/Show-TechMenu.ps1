@@ -162,6 +162,12 @@ function Show-TechMenu {
             Command     = { Test-ConnectionDoctor }
             Icon        = "🩺"
         }
+        @{
+            Name        = "Website & Certificate Check"
+            Description = "HTTP, redirects and TLS certificate health"
+            Command     = { Test-WebsiteCertificate }
+            Icon        = "🌐"
+        }
     )
     
     # ══════════════════════════════════════════════════════════════════════════
@@ -307,6 +313,11 @@ function Show-TechMenu {
     function Invoke-MenuItem {
         param([hashtable]$Item)
 
+        # Child tools signal an explicit Back/Quit through this invocation-local
+        # helper. Ordinary completion and failures still keep results visible.
+        $navigation = @{ Returned = $false }
+        function Complete-TechMenuReturn { $navigation.Returned = $true }
+
         Clear-Host
         Write-Host ""
         Write-Color ("=" * 63) 'Header'
@@ -316,14 +327,17 @@ function Show-TechMenu {
 
         try {
             & $Item.Command
+            if ($navigation.Returned) { return }
         } catch {
             Write-Color "`nError: $_" 'Bad'
         }
 
         Write-Host ""
         Write-Color ("─" * 63) 'Detail'
-        Write-Color "Press Enter to return to menu..." 'Detail'
-        Read-Host
+        Write-Color "[Q] Return to menu..." 'Detail'
+        do {
+            $returnChoice = Read-Host 'Choose'
+        } until ($returnChoice.Trim() -ieq 'Q')
     }
 
     while ($running) {

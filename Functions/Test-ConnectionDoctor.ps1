@@ -57,7 +57,7 @@ function Test-ConnectionDoctor {
                 $tone=if ($i -eq $selected) {'Good'} else {'Detail'}
                 Write-CdColor ("  {0} [{1}] {2,-17} {3,-12}" -f $marker,($i+1),$options[$i].Name,$portText) $tone
             }
-            Write-CdColor '    [Q] Back'
+            Write-CdColor '    [Q] Return to menu...'
             if ($useArrows) {
                 $key=[Console]::ReadKey($true)
                 if ($key.Key -eq 'UpArrow') { $selected=($selected+$options.Count-1)%$options.Count; continue }
@@ -211,14 +211,14 @@ function Test-ConnectionDoctor {
         if ($NoPrompt) { throw 'Supply -Target with -NoPrompt.' }
         Write-CdColor '  Enter a hostname, IPv4 address or web URL. Enter alone returns to TECH.' Detail
         $Target=Read-Host 'Target'
-        if (-not $Target) { return }
+        if (-not $Target) { if (Get-Command Complete-TechMenuReturn -ErrorAction SilentlyContinue) { Complete-TechMenuReturn }; return }
     }
     $destination=ConvertTo-CdTarget $Target
     if (-not $Port) {
         if ($NoPrompt) { $Port=if ($destination.UrlPort) {$destination.UrlPort} else {443} }
         else {
             $selection=Select-CdService -SuggestedPort $(if ($destination.UrlPort) {$destination.UrlPort} else {443})
-            if ($null -eq $selection) { return }
+            if ($null -eq $selection) { if (Get-Command Complete-TechMenuReturn -ErrorAction SilentlyContinue) { Complete-TechMenuReturn }; return }
             $Port=$selection
         }
     }
@@ -333,14 +333,16 @@ function Test-ConnectionDoctor {
     Write-CdColor "`n  No settings changed. Ticket summary includes internal names/IPs." Detail
     if (-not $NoPrompt) {
         :reportActions while ($true) {
-            Write-CdColor "`n  [C] Copy ticket summary   [D] Details   [Q] Back" Header
+            Write-CdColor "`n  [C] Copy ticket summary   [D] Details" Header
+            Write-CdColor ('─' * 63) Detail
+            Write-CdColor '[Q] Return to menu...' Header
             switch ((Read-Host 'Choose [Enter: back]').ToUpperInvariant()) {
                 'C' {
                     try { Copy-CdReport $summary; Write-CdColor '  ✓ Copied with icons + rich-text colors (plain-text fallback included).' Good }
                     catch { Write-CdColor "  ⚠ Clipboard unavailable: $($_.Exception.Message)" Warn }
                 }
                 'D' { Write-Host "`n$summary`n" }
-                { $_ -in @('','Q') } { break reportActions }
+                { $_ -in @('','Q') } { if (Get-Command Complete-TechMenuReturn -ErrorAction SilentlyContinue) { Complete-TechMenuReturn }; break reportActions }
                 default { Write-CdColor '  Choose C, D or Q.' Warn; continue }
             }
         }

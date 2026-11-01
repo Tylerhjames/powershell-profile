@@ -164,8 +164,8 @@ function Get-BitLockerInformation {
         Write-Host "2. Enable BitLocker on a Drive"
         Write-Host "3. Disable BitLocker on a Drive"
         Write-Host "4. Get Recovery Keys"
-        Write-Host "5. Exit"
-        Write-Color "========================================" 'Header'
+        Write-Color ('─' * 63) 'Detail'
+        Write-Color '[Q] Return to menu...' 'Detail'
     }
 
     # Main script execution
@@ -180,7 +180,7 @@ function Get-BitLockerInformation {
     # Main menu loop
     do {
         Show-Menu
-        $choice = Read-Host "`nEnter your choice (1-5)"
+        $choice = Read-Host "`nEnter your choice (1-4, Q)"
 
         switch ($choice) {
             "1" {
@@ -203,12 +203,12 @@ function Get-BitLockerInformation {
             "4" {
                 Get-RecoveryKeys
             }
-            "5" {
-                Write-Color "`nExiting...`n" 'Detail'
-                break
+            { $_ -in @('5','Q') } {
+                if (Get-Command Complete-TechMenuReturn -ErrorAction SilentlyContinue) { Complete-TechMenuReturn }
+                return
             }
             default {
-                Write-Color "`nInvalid choice! Please select 1-5.`n" 'Bad'
+                Write-Color "`nInvalid choice! Please select 1-4 or Q.`n" 'Bad'
             }
         }
 

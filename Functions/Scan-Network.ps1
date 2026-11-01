@@ -760,7 +760,7 @@ function Scan-Network {
         Write-Color 'Opening results in GridView. Select row(s) and click OK for actions.' 'Detail'
         :selectHosts while ($true) {
             $selected = @($Results | Out-GridView -PassThru -Title "Network Scan Results - $Network | Found: $($Results.Count) hosts | Select row(s) + OK for actions")
-            if ($selected.Count -eq 0) { return }
+            if ($selected.Count -eq 0) { if (Get-Command Complete-TechMenuReturn -ErrorAction SilentlyContinue) { Complete-TechMenuReturn }; return }
 
             Write-Color "`nSelected $($selected.Count) host(s):" 'Header'
             $selected | ForEach-Object { Write-Color "    $($_.IPAddress)  $($_.Hostname)  $($_.MAC)" }
@@ -770,7 +770,9 @@ function Scan-Network {
                 Write-Color '  [1] Copy MAC(s) to clipboard'
                 Write-Color '  [2] Copy IP(s) to clipboard'
                 Write-Color '  [3] Open web interface(s) in browser'
-                Write-Color '  [B] Back to grid    [Q] Done' 'Detail'
+                Write-Color '  [B] Back to grid' 'Detail'
+                Write-Color ('─' * 63) 'Detail'
+                Write-Color '  [Q] Return to menu...' 'Detail'
                 $action = ([string](Read-Host 'Choose (1, 2, 3, B, or Q)')).Trim().ToUpperInvariant()
 
                 switch ($action) {
@@ -802,7 +804,7 @@ function Scan-Network {
                         }
                     }
                     'B' { continue selectHosts }
-                    'Q' { return }
+                    'Q' { if (Get-Command Complete-TechMenuReturn -ErrorAction SilentlyContinue) { Complete-TechMenuReturn }; return }
                     '' { continue chooseAction }
                     default { Write-Color 'Choose 1, 2, 3, B, or Q.' 'Warn' }
                 }

@@ -55,7 +55,8 @@ function Test-Network {
         Write-Color "  [3] Internet Speed Test"
         Write-Color "      └─ Uses Speedtest.net CLI (Ookla)" 'Detail'
         Write-Host ""
-        Write-Color "  [Q] Quit`n" 'Detail'
+        Write-Color ('─' * 63) 'Detail'
+        Write-Color "  [Q] Return to menu...`n" 'Detail'
         
         do {
             $choice = Read-Host "Choose an option"
@@ -314,7 +315,7 @@ function Test-Network {
     if ($Mode -eq 'Interactive') {
         $selectedMode = Show-TestMenu
         if (-not $selectedMode) {
-            Write-Color "`nTest cancelled.`n" 'Detail'
+            if (Get-Command Complete-TechMenuReturn -ErrorAction SilentlyContinue) { Complete-TechMenuReturn }
             return
         }
         $Mode = $selectedMode
@@ -334,7 +335,7 @@ function Test-Network {
     # Get target server
     $targetHost = Select-TargetServer -TestMode $Mode
     if (-not $targetHost) {
-        Write-Color "`nTest cancelled.`n" 'Detail'
+        if (Get-Command Complete-TechMenuReturn -ErrorAction SilentlyContinue) { Complete-TechMenuReturn }
         return
     }
     

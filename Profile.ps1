@@ -155,6 +155,7 @@ if (Test-Path $functionsPath) {
         @{ Name = 'Show-TechMenu';            File = 'Show-TechMenu.ps1';           Aliases = 'tech','techmenu' }
         @{ Name = 'Manage-RoamingSsh';         File = 'Manage-RoamingSsh.ps1' }
         @{ Name = 'Test-ConnectionDoctor';     File = 'Test-ConnectionDoctor.ps1' }
+        @{ Name = 'Test-WebsiteCertificate';   File = 'Test-WebsiteCertificate.ps1' }
         @{ Name = 'Start-Pulse';              File = 'Start-Pulse.ps1';             Aliases = 'pulse' }
         @{ Name = 'Test-EmailAuthentication'; File = 'Test-EmailAuthentication.ps1'; Aliases = 'Test-EmailDNS','Check-EmailDNS','Test-DMARC' }
         @{ Name = 'Test-Internet';            File = 'Test-Internet.ps1' }

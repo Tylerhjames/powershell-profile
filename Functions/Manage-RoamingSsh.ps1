@@ -173,8 +173,10 @@ function Manage-RoamingSsh {
     $state=if (Test-Path -LiteralPath $journal) { Get-Content -LiteralPath $journal -Raw | ConvertFrom-Json -AsHashtable } else { @{} }
     while ($true) {
         Write-Host "`nSSH & YubiKey Setup (existing Nano/NFC keys only)"
-        Write-Host '[1] Add/edit server  [2] Set up this computer  [3] Test connection  [4] Review & publish  [Q] Back'
+        Write-Host '[1] Add/edit server  [2] Set up this computer  [3] Test connection  [4] Review & publish'
         if ($state.Count) { Write-Host "Pending aliases: $($state.Aliases -join ', '). Commit: $($state.Commit). Tests must pass in this session." }
+        Write-Host ('─' * 63)
+        Write-Host '[Q] Return to menu...'
         try {
             switch ((Read-Host 'Choose').ToUpperInvariant()) {
                 '1' {
@@ -217,7 +219,7 @@ function Manage-RoamingSsh {
                 }
                 '3' { Test-RswHost (Read-Host 'Alias to test') }
                 '4' { Publish-RswChanges }
-                'Q' { if ($state.Count) { Write-Host 'Pending work retained locally. Reopen this wizard, retest, then publish. No automatic push.' }; return }
+                'Q' { if ($state.Count) { Write-Host 'Pending work retained locally. Reopen this wizard, retest, then publish. No automatic push.' }; if (Get-Command Complete-TechMenuReturn -ErrorAction SilentlyContinue) { Complete-TechMenuReturn }; return }
                 default { Write-Host 'Choose 1, 2, 3, 4 or Q.' }
             }
         } catch { Write-Host "STOPPED: $_" -ForegroundColor Yellow }
