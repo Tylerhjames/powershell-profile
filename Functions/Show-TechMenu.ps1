@@ -156,6 +156,12 @@ function Show-TechMenu {
             Command     = { Manage-RoamingSsh }
             Icon        = "🔑"
         }
+        @{
+            Name        = "Connection Doctor"
+            Description = "Route, TCP & DNS; ticket summary"
+            Command     = { Test-ConnectionDoctor }
+            Icon        = "🩺"
+        }
     )
     
     # ══════════════════════════════════════════════════════════════════════════
