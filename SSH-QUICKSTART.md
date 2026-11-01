@@ -58,11 +58,9 @@ Initialize-RoamingSsh -ImportKey NFC
 
 ## Add another physical YubiKey
 
-Create its own resident SSH credential; verify recovery; authorize its public key
-on the desired servers; extend the import helper with its name/fingerprint and
-configure aliases. Test before retiring anything. The current helper supports
-**Nano and NFC only**. Use `tech` > **SSH & YubiKey Setup** for server edits,
-imports, testing and publishing ([wizard guide](SSH-WIZARD.md)). New-key enrollment
-and automatic key selection are not included in this first version.
+Use `tech` > **SSH & YubiKey Setup** > **5 — Add a key**.
+Choose enrollment for a new resident credential, or recovery to register one already on the hardware. The wizard verifies recovery, installs the local identity without overwriting existing files, and records public metadata in `SSH/keys.json`.
 
-More detail: [SSH.md](SSH.md). Never commit PINs or private identity files.
+Choose **4 — Review & publish** to sync the registry. Authorize the new `.pub` on the desired servers separately, then use **1 — Add/edit server** and **3 — Test connection**. Keep working access while testing. Other computers can then use **2** or `Initialize-RoamingSsh -ImportKey <name>` to recover the registered identity.
+
+Nano and NFC continue to work unchanged. See [SSH-WIZARD.md](SSH-WIZARD.md) for PIN/touch choices, recovery, and publishing behavior. Never commit PINs or private identity files.

@@ -1,13 +1,22 @@
 # SSH & YubiKey Setup
 
 Run `tech`, choose **SSH & YubiKey Setup** (J), or run `Manage-RoamingSsh`.
-Existing Nano/NFC aliases are unchanged. No enrollment, key deletion, or server
-authorization changes are performed by this version.
+Existing Nano/NFC aliases, filenames, and fingerprints are unchanged. The menu is vertical:
+
+1. Add/edit server
+2. Set up this computer / import a registered key
+3. Test connection
+4. Review & publish
+5. Add a key (enroll or recover)
+6. View registered keys and local status
+Q. Return to menu
+
+No server authorization changes, key deletion, or hardware reset are performed.
 
 ## Add or edit a server
 
 1. Authorize the selected key's public key on the server separately.
-2. Choose **1**, enter the alias, hostname/IP, username and `Nano` or `NFC`.
+2. Choose **1**, enter the alias, hostname/IP, username and a registered key name (including `Nano` or `NFC`).
    Editing an existing block preserves all of its aliases. Advanced blocks
    (ports, wildcard patterns, extra directives) must be edited manually.
 3. Review the endpoint/key and type `YES` to save. The old config is backed up
@@ -26,7 +35,7 @@ Local SSH overrides that change the resolved host/user/identity block verificati
 
 ## Set up another computer
 
-Choose **2**, then Nano or NFC to call the existing import helper. Import requires
+Choose **2**, then any registered key name to call the import helper. Existing `Initialize-RoamingSsh -ImportKey Nano` and `-ImportKey NFC` commands still work. Import requires
 Administrator PowerShell under your usual account and the key's PIN entered
 locally. Connect only the key being imported. Leave the choice blank to link
 configuration without importing. Local setup has nothing to commit or push.
@@ -41,9 +50,31 @@ reconciliation. Existing tracked/index changes block wizard editing/publishing;
 untracked files are never included. External edits to a pending config also stop
 the wizard: review those changes and the local journal before proceeding.
 
-The wizard publishes **only `SSH/roaming.conf`**. It does not publish other profile
+The wizard publishes **only `SSH/roaming.conf` and `SSH/keys.json`**. The registry contains names, local filenames, public labels, and expected public fingerprints; no private identity handles or PINs. It does not publish other profile
 work or prove that all servers authorize all keys. See [SSH-QUICKSTART.md](SSH-QUICKSTART.md)
 for the overall workflow and [SSH.md](SSH.md) for key details.
 
+## Add a key
+
+Choose **5**, give the key a unique name, then choose enrollment or recovery.
+
+- **Enrollment** creates a new `ed25519-sk` resident credential with a unique SSH application name. It asks whether each login should require PIN verification; No retains the current touch-only behavior. A FIDO2 key supporting this algorithm and a configured FIDO PIN are required. PIN setup/reset is not performed by this wizard.
+- **Recovery** retrieves existing resident credentials from the connected key. Select the intended fingerprint; a fingerprint already registered should instead be imported through option 2.
+
+Connect only the intended hardware key. Enter PINs and optional file passphrases directly into OpenSSH. Enrollment is followed by recovery and matching-fingerprint verification before registration. Confirm the name/fingerprint before the recovered identity is installed locally. Existing identity files are never overwritten.
+
+The new local filename is `~/.ssh/id_roaming_<name>`. Public metadata is added to `SSH/keys.json`; use **4** to review and publish it. A key-only registration does not require a server login. Host edits still require their successful live connection tests. Then authorize the `.pub` on the desired server separately, use **1** to assign the new key to an alias, and test it.
+
+Working/recovery files remain under `~/.ssh/key-setup-*` outside Git, including after failure or cancellation. If enrollment succeeded but later steps failed, recover the existing credential on the next attempt rather than enrolling another one. No automatic cleanup deletes credentials. Local file status in option 6 is not a hardware-presence or server-authorization test.
+
+Older pending wizard journals are preserved but refused by this version because verification now covers both configuration and registry. Finish those pending edits with the previous version or review them manually before using the new wizard.
+
 Developer checks (no hardware or real remote required):
-`pwsh -NoProfile -File Tests/Test-RoamingSshWizard.ps1`
+
+```powershell
+pwsh -NoProfile -File Tests/Test-RoamingSshWizard.ps1
+pwsh -NoProfile -File Tests/Test-RoamingSshKeys.ps1
+pwsh -NoProfile -File Tests/Test-RoamingSshMenu.ps1
+```
+
+Enrollment/recovery flags follow the [OpenSSH ssh-keygen documentation](https://man.openbsd.org/ssh-keygen#FIDO_AUTHENTICATOR). Tests use mocked hardware; actual enrollment and live login remain operator validation.

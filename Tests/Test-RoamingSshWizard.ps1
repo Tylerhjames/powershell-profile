@@ -16,6 +16,11 @@ function Reject([scriptblock]$Code,[string]$Pattern) {
 }
 $keys=@{Nano='~/.ssh/id_tyler_5cnano'; NFC='~/.ssh/id_tyler_5cnfc'}
 $text="Host arca cbit-arca 10.31.31.5`n    HostName 10.31.31.5`n    User tyler`n    IdentitiesOnly yes`n    IdentityFile ~/.ssh/id_tyler_5cnano`n`n# Preserve this comment`nHost *`n"
+$keys.Backup='~/.ssh/id_roaming_backup'
+Assert ((New-RswConfig $text backuphost host.example tyler Backup).Contains('IdentityFile ~/.ssh/id_roaming_backup')) 'New registry key can be assigned to a host'
+Assert (Test-RswPublishStatus ' M SSH/keys.json') 'Registry-only changes may publish'
+Assert (-not (Test-RswPublishStatus 'M  SSH/keys.json')) 'Staged registry changes rejected'
+Assert (-not (Test-RswPublishStatus ' M Profile.ps1')) 'Unrelated tracked files rejected'
 $new=New-RswConfig $text proxy2 10.31.31.4 tyler NFC
 Assert ($new.Contains('IdentityFile ~/.ssh/id_tyler_5cnfc')) 'NFC selected'
 Assert ($new.StartsWith($text.Substring(0,$text.IndexOf('Host *')))) 'Unrelated block/comment unchanged'
@@ -26,7 +31,7 @@ Assert ($edit.Contains('# Preserve this comment')) 'Comments retained on edit'
 Reject { New-RswConfig $text "bad`nHost *" host tyler Nano } 'Alias:'
 Reject { New-RswConfig $text good '-oProxyCommand=bad' tyler Nano } 'plain hostname'
 Reject { New-RswConfig $text good host 'user name' Nano } 'plain login'
-Reject { New-RswConfig $text good host tyler Unknown } 'Select Nano'
+Reject { New-RswConfig $text good host tyler Unknown } 'Select a registered'
 Reject { New-RswConfig ($text.Replace('    User tyler',"    Port 2222`n    User tyler")) arca host tyler Nano } 'advanced'
 Reject { New-RswConfig ($text+$text) arca host tyler Nano } 'multiple blocks'
 
@@ -35,13 +40,16 @@ $repo=Join-Path $root 'repo'
 $remote=Join-Path $root 'remote.git'
 $null=New-Item -ItemType Directory -Path (Join-Path $repo 'SSH') -Force
 $relative='SSH/roaming.conf'; $config=Join-Path $repo $relative
+$registry=Join-Path $repo 'SSH/keys.json'
+$managed=@('SSH/roaming.conf','SSH/keys.json')
+[IO.File]::WriteAllText($registry,'[]')
 $journal=Join-Path $root 'journal.json'
 [IO.File]::WriteAllText($config,$text)
 & git init --bare $remote | Out-Null
 Invoke-RswGit @('init','-b','main') | Out-Null
 Invoke-RswGit @('config','user.name','Wizard Tests') | Out-Null
 Invoke-RswGit @('config','user.email','tests@example.invalid') | Out-Null
-Invoke-RswGit @('add','--',$relative) | Out-Null
+Invoke-RswGit @('add','--',$relative,'SSH/keys.json') | Out-Null
 Invoke-RswGit @('commit','-m','fixture') | Out-Null
 Invoke-RswGit @('remote','add','origin',$remote) | Out-Null
 Invoke-RswGit @('push','-u','origin','main') | Out-Null
@@ -51,6 +59,9 @@ $state=@{Base=$base; Branch='main'; Hash=(Get-RswHash); Aliases=@('proxy2'); Com
 $verified=@{}
 Reject { Publish-RswChanges } 'Test proxy2'
 $verified.proxy2=$state.Hash
+[IO.File]::WriteAllText($registry,'[{}]')
+Reject { Publish-RswChanges } 'outside the wizard'
+[IO.File]::WriteAllText($registry,'[]')
 [IO.File]::AppendAllText($config,'# external change')
 Reject { Publish-RswChanges } 'outside the wizard'
 [IO.File]::WriteAllText($config,$new)

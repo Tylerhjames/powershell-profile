@@ -1,3 +1,5 @@
+. (Join-Path $PSScriptRoot 'RoamingSshKeys.ps1')
+
 function global:Initialize-RoamingSsh {
     <#
     .SYNOPSIS
@@ -10,9 +12,15 @@ function global:Initialize-RoamingSsh {
     Initialize-RoamingSsh -ImportKey Nano
     #>
     [CmdletBinding()]
-    param([ValidateSet('Nano', 'NFC')][string]$ImportKey)
+    param([string]$ImportKey)
 
     $ErrorActionPreference = 'Stop'
+    $record=$null
+    if ($ImportKey) {
+        $record=@(Get-RoamingSshKeys | Where-Object Name -IEQ $ImportKey)
+        if ($record.Count -ne 1) { throw 'Unknown key name. Register it through SSH & YubiKey Setup first.' }
+        $record=$record[0]
+    }
     $sshDir = Join-Path $HOME '.ssh'
     $config = Join-Path $sshDir 'config'
     $shared = Join-Path (Split-Path $PSScriptRoot -Parent) 'SSH\roaming.conf'
@@ -35,15 +43,10 @@ function global:Initialize-RoamingSsh {
     Write-Host 'Shared SSH host settings linked. Existing local settings take precedence.'
     if (-not $ImportKey) { return }
 
-    if (-not $IsWindows) { throw 'Automated resident-key import currently supports Windows with Git OpenSSH.' }
-    $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    if (-not $admin) { throw 'Open PowerShell as Administrator under the SAME Windows account, then repeat this import.' }
-    $gitSsh = Get-ProfileGitSsh
-    if (-not $gitSsh) { throw 'Git for Windows OpenSSH is required for resident-key import.' }
-    $keygen = Join-Path (Split-Path $gitSsh -Parent) 'ssh-keygen.exe'
-    $name = if ($ImportKey -eq 'Nano') { 'id_tyler_5cnano' } else { 'id_tyler_5cnfc' }
-    $publicLabel = if ($ImportKey -eq 'Nano') { 'tyler-5cnano' } else { 'tyler-5cnfc' }
-    $expected = if ($ImportKey -eq 'Nano') { 'SHA256:Y7WxfPgXN37X8FhrXzBUNaa8vLmaYnKm19BxHkUMOf0' } else { 'SHA256:QsJMtJGoabxp1a9/PABQ3S9dsxSPhyRIdFYT2ncIfmw' }
+    $keygen = Get-RoamingSshKeygen
+    $name = $record.FileName
+    $publicLabel = $record.PublicLabel
+    $expected = $record.Fingerprint
     $target = Join-Path $sshDir $name
     if ((Test-Path -LiteralPath $target) -or (Test-Path -LiteralPath "$target.pub")) {
         throw "Identity already exists: $target. Preserved without overwriting; use ssh -G arca to inspect configuration."
@@ -54,27 +57,18 @@ function global:Initialize-RoamingSsh {
     $savedPath = $env:PATH
     Push-Location $importDir
     try {
-        $env:PATH = "$(Split-Path $gitSsh -Parent);$savedPath"
+        $env:PATH = "$(Split-Path $keygen -Parent);$savedPath"
         Write-Host "Connect ONLY the $ImportKey. Enter its PIN locally and touch when prompted."
         Write-Host 'Press Enter twice at the optional FILE passphrase prompts if you want no file passphrase.'
-        & $keygen -K
-        if ($LASTEXITCODE -ne 0) { throw "Resident retrieval failed ($LASTEXITCODE). Files retained at $importDir" }
+        Invoke-RoamingSshKeygen $keygen @('-K') | Out-Host
         $matches = @(foreach ($pub in Get-ChildItem -LiteralPath $importDir -Filter '*.pub') {
-            $fp = & $keygen -lf $pub.FullName
-            if ($LASTEXITCODE -eq 0 -and (("$fp" -split '\s+')[1] -eq $expected)) { $pub }
+            $fp = Get-RoamingSshFingerprint $keygen $pub.FullName
+            if ($fp -ceq $expected) { $pub }
         })
         if ($matches.Count -ne 1) { throw "Expected exactly one matching $ImportKey identity; found $($matches.Count). Files retained at $importDir" }
-        $handle = $matches[0].FullName.Substring(0, $matches[0].FullName.Length - 4)
-        # Resident recovery uses the FIDO application as its public comment.
-        # Normalize the exported label without altering key material/fingerprint.
-        $publicParts = ([IO.File]::ReadAllText($matches[0].FullName).Trim() -split '\s+', 3)
-        [IO.File]::WriteAllText($matches[0].FullName, "$($publicParts[0]) $($publicParts[1]) $publicLabel`n", [Text.UTF8Encoding]::new($false))
-        # File.Copy refuses an existing destination, including concurrent changes.
-        [IO.File]::Copy($handle, $target, $false)
-        [IO.File]::Copy($matches[0].FullName, "$target.pub", $false)
+        Copy-RoamingSshIdentity $matches[0].FullName $target $publicLabel
         Write-Host "Verified and imported $ImportKey identity: $target"
-        $testAlias = if ($ImportKey -eq 'Nano') { 'arca' } else { 'arca2' }
-        Write-Host "Recovery copies retained at $importDir. Test with: ssh $testAlias"
+        Write-Host "Recovery copies retained at $importDir. Test a server alias configured for $ImportKey."
     } finally {
         $env:PATH = $savedPath
         Pop-Location

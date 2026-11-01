@@ -88,8 +88,8 @@ migration; their cleanup is separate. Aliases and import now select the named ke
 
 The old Nano identity `id_ed25519_sk` is retained locally for rollback/other
 servers. Its old Arca authorization is retired separately after successful tests.
-Credential replacement requires updating both the fingerprint in the setup
-function and server authorizations; import will not silently trust a different key.
+Credential replacement requires updating both the fingerprint in `SSH/keys.json`
+and server authorizations; import will not silently trust a different key.
 
 ## Rollback
 
@@ -107,3 +107,7 @@ The Windows Security selection dialog may precede touch. No provider/PIN setting
 are changed to suppress it. Enrollment required explicit USB selection in an
 elevated session; this is not part of everyday SSH use. No hardware key creation
 or reset happens as part of the roaming profile.
+
+## Additional keys
+
+`Manage-RoamingSsh` option 5 enrolls or recovers a named resident credential and verifies recovery before registration. `SSH/keys.json` is the shared public key registry. Existing Nano/NFC records are preserved. See [SSH-WIZARD.md](SSH-WIZARD.md) for the complete workflow. No enrollment happens at profile startup.

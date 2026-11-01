@@ -3,7 +3,7 @@ function Manage-RoamingSsh {
     .SYNOPSIS
     Add/edit SSH hosts, import existing keys, test, and publish verified changes.
     .DESCRIPTION
-    Never enrolls/deletes keys or changes server authorizations. Pending work is
+    Enrollment is explicit; never deletes keys or changes server authorizations. Pending work is
     kept in a local journal; live verification must be repeated after reopening.
     #>
     [CmdletBinding()]
@@ -12,7 +12,10 @@ function Manage-RoamingSsh {
     $repo = Split-Path $PSScriptRoot -Parent
     $relative = 'SSH/roaming.conf'
     $config = Join-Path $repo $relative
-    $keys = @{ Nano='~/.ssh/id_tyler_5cnano'; NFC='~/.ssh/id_tyler_5cnfc' }
+    $registry = Join-Path $repo 'SSH/keys.json'
+    $managed = @('SSH/roaming.conf','SSH/keys.json')
+    $keys = @{}
+    foreach ($entry in Get-RoamingSshKeys -Path $registry) { $keys[$entry.Name]='~/.ssh/'+$entry.FileName }
     $verified = @{}
 
     function Invoke-RswGit {
@@ -21,7 +24,16 @@ function Manage-RoamingSsh {
         if ($LASTEXITCODE -ne 0) { throw "Git failed: $($Arguments -join ' ')`n$($result -join "`n")" }
         ($result -join "`n").TrimEnd()
     }
-    function Get-RswHash { (Get-FileHash -LiteralPath $config -Algorithm SHA256).Hash }
+    function Get-RswHash {
+        $hashes=@((Get-FileHash -LiteralPath $config -Algorithm SHA256).Hash,(Get-FileHash -LiteralPath $registry -Algorithm SHA256).Hash)
+        [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($hashes -join ':')))
+    }
+    function Test-RswPublishStatus {
+        param([string]$Status)
+        $lines=@($Status -split '\r?\n' | Where-Object { $_ })
+        $lines.Count -gt 0 -and @($lines | Where-Object { $_ -cnotin @(' M SSH/roaming.conf',' M SSH/keys.json') }).Count -eq 0
+    }
+
     function Save-RswJournal { $state | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $journal -Encoding utf8 }
     function Get-RswBlocks {
         param([string]$Text)
@@ -49,7 +61,7 @@ function Manage-RoamingSsh {
         if ($Alias -notmatch '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$') { throw 'Alias: letters, numbers, dash or underscore only.' }
         if ($Address -notmatch '^[a-zA-Z0-9][a-zA-Z0-9.:-]*$') { throw 'Enter a plain hostname or IP address, without spaces or SSH options.' }
         if ($User -notmatch '^[a-zA-Z_][a-zA-Z0-9_.-]*[$]?$') { throw 'Enter a plain login username.' }
-        if (-not $keys.ContainsKey($Key)) { throw 'Select Nano or NFC.' }
+        if (-not $keys.ContainsKey($Key)) { throw 'Select a registered key.' }
         $blocks = @(Get-RswBlocks $Text)
         $found = @($blocks | Where-Object { $Alias -in $_.Names })
         if ($found.Count -gt 1) { throw 'Alias occurs in multiple blocks. Review the config manually.' }
@@ -133,7 +145,7 @@ function Manage-RoamingSsh {
         } else {
             if ($head -ne $state.Base) { throw 'HEAD changed since editing; review before publishing.' }
             $status=Invoke-RswGit @('status','--porcelain','--untracked-files=no')
-            if ($status -cne ' M SSH/roaming.conf') { throw 'Only unstaged wizard SSH config changes may be published. Review other tracked/index changes first.' }
+            if (-not (Test-RswPublishStatus $status)) { throw 'Only unstaged wizard SSH config/registry changes may be published. Review other tracked/index changes first.' }
         }
         foreach ($alias in $state.Aliases) {
             if ($verified[$alias] -ne $state.Hash) { throw "Test $alias successfully in this wizard session before publishing." }
@@ -142,17 +154,17 @@ function Manage-RoamingSsh {
         $remote=Invoke-RswGit @('rev-parse',"refs/remotes/origin/$branch")
         if ($remote -ne $state.Base -and $remote -ne $state.Commit) { throw 'Remote branch moved; reconcile manually. No merge or force-push performed.' }
         if ($state.Commit) { Invoke-RswGit @('show','--stat',$state.Commit) | Write-Host }
-        else { Invoke-RswGit @('diff','--',$relative) | Write-Host }
+        else { Invoke-RswGit (@('diff','--')+$managed) | Write-Host }
         $pushUrl=Invoke-RswGit @('remote','get-url','--push','origin')
         Write-Host "Destination: $pushUrl / $branch"
         if ((Read-Host 'Commit (if needed) and push these changes? Type YES') -cne 'YES') { Write-Host 'Saved locally; not published.'; return }
         if ((Get-RswHash) -ne $state.Hash -or (Invoke-RswGit @('rev-parse','HEAD')) -ne $head -or (Invoke-RswGit @('branch','--show-current')) -ne $branch) { throw 'Repository changed during confirmation. Review and retest.' }
         $currentStatus=Invoke-RswGit @('status','--porcelain','--untracked-files=no')
-        if (($state.Commit -and $currentStatus) -or (-not $state.Commit -and $currentStatus -cne ' M SSH/roaming.conf')) { throw 'Index or tracked files changed during confirmation.' }
+        if (($state.Commit -and $currentStatus) -or (-not $state.Commit -and -not (Test-RswPublishStatus $currentStatus))) { throw 'Index or tracked files changed during confirmation.' }
         if (-not $state.Commit) {
             Invoke-RswGit @('diff','--check') | Write-Host
-            Invoke-RswGit @('add','--',$relative) | Write-Host
-            try { Invoke-RswGit @('commit','-m',"Update roaming SSH hosts: $($state.Aliases -join ', ')",'--',$relative) | Write-Host }
+            Invoke-RswGit (@('add','--')+$managed) | Write-Host
+            try { Invoke-RswGit (@('commit','-m','Update roaming SSH hosts and key registry','--')+$managed) | Write-Host }
             catch { throw "Commit failed; config may be staged. Review git status. $_" }
             $state.Commit=Invoke-RswGit @('rev-parse','HEAD')
             Save-RswJournal
@@ -171,9 +183,15 @@ function Manage-RoamingSsh {
     $repoId=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($repo))).Substring(0,16)
     $journal=Join-Path $localDir "$repoId.json"
     $state=if (Test-Path -LiteralPath $journal) { Get-Content -LiteralPath $journal -Raw | ConvertFrom-Json -AsHashtable } else { @{} }
+    if ($state.Count -and $state.Version -ne 2) { throw 'Older pending SSH journal found. Finish it with the previous wizard or review it manually before upgrading; nothing changed.' }
     while ($true) {
-        Write-Host "`nSSH & YubiKey Setup (existing Nano/NFC keys only)"
-        Write-Host '[1] Add/edit server  [2] Set up this computer  [3] Test connection  [4] Review & publish'
+        Write-Host "`nSSH & YubiKey Setup"
+        Write-Host '[1] Add/edit server'
+        Write-Host '[2] Set up this computer / import a registered key'
+        Write-Host '[3] Test connection'
+        Write-Host '[4] Review & publish'
+        Write-Host '[5] Add a key (enroll or recover)'
+        Write-Host '[6] View registered keys and local status'
         if ($state.Count) { Write-Host "Pending aliases: $($state.Aliases -join ', '). Commit: $($state.Commit). Tests must pass in this session." }
         Write-Host ('─' * 63)
         Write-Host '[Q] Return to menu...'
@@ -186,7 +204,7 @@ function Manage-RoamingSsh {
                     $alias=Read-Host 'Alias to add/edit (existing blocks retain all their aliases)'
                     $address=Read-Host 'Hostname or IP'
                     $userName=Read-Host 'Login username'
-                    $key=Read-Host 'Key: Nano or NFC'
+                    $key=Read-Host ('Key: '+(($keys.Keys | Sort-Object) -join ', '))
                     $original=[IO.File]::ReadAllText($config)
                     $proposal=New-RswConfig $original $alias $address $userName $key
                     $changed=@(Get-RswBlocks $proposal | Where-Object { $alias -in $_.Names })[0]
@@ -196,7 +214,7 @@ function Manage-RoamingSsh {
                     $backup=Join-Path $localDir ("roaming-"+[guid]::NewGuid().ToString('N')+'.conf')
                     Copy-Item -LiteralPath $config -Destination $backup
                     if (-not $state.Count) {
-                        $state=@{Base=(Invoke-RswGit @('rev-parse','HEAD')); Branch=(Invoke-RswGit @('branch','--show-current')); Aliases=@(); Commit=$null; Hash=(Get-RswHash)}
+                        $state=@{Version=2; Base=(Invoke-RswGit @('rev-parse','HEAD')); Branch=(Invoke-RswGit @('branch','--show-current')); Aliases=@(); Commit=$null; Hash=(Get-RswHash)}
                     }
                     if ([IO.File]::ReadAllText($config) -cne $original) { throw 'Config changed during preview; no save performed.' }
                     [IO.File]::WriteAllText($config,$proposal,[Text.UTF8Encoding]::new($false))
@@ -210,17 +228,47 @@ function Manage-RoamingSsh {
                     Test-RswHost $alias
                 }
                 '2' {
-                    $key=Read-Host 'Enter Nano or NFC to import; Enter only to link configuration'
+                    $key=Read-Host ('Key to import: '+(($keys.Keys | Sort-Object) -join ', ')+'; Enter only to link configuration')
                     if ($key) {
-                        if ($key -notin @('Nano','NFC')) { throw 'Choose Nano or NFC.' }
+                        if (-not $keys.ContainsKey($key)) { throw 'Choose a registered key.' }
                         Initialize-RoamingSsh -ImportKey $key
                     } else { Initialize-RoamingSsh }
                     Write-Host 'Local setup only. No repository changes to publish.'
                 }
                 '3' { Test-RswHost (Read-Host 'Alias to test') }
                 '4' { Publish-RswChanges }
+                '5' {
+                    if ($state.Commit) { throw 'Finish publishing the pending commit before adding a key.' }
+                    if ($state.Count) { if ((Get-RswHash) -ne $state.Hash) { throw 'External edit detected. Review manually.' } }
+                    elseif (Invoke-RswGit @('status','--porcelain','--untracked-files=no')) { throw 'Tracked changes/index must be clean before registering keys.' }
+                    $before=Get-RswHash
+                    $base=Invoke-RswGit @('rev-parse','HEAD')
+                    $branch=Invoke-RswGit @('branch','--show-current')
+                    $registered=@(Get-RoamingSshKeys -Path $registry)
+                    $entry=Add-RoamingSshKey -RegisteredKeys $registered
+                    if (-not $entry) { break }
+                    if ((Get-RswHash) -ne $before -or (Invoke-RswGit @('rev-parse','HEAD')) -ne $base -or (Invoke-RswGit @('branch','--show-current')) -ne $branch) {
+                        throw 'Repository changed during key setup. Local identity preserved; registry not updated. Review before continuing.'
+                    }
+                    Copy-Item -LiteralPath $registry -Destination (Join-Path $localDir ('keys-'+[guid]::NewGuid().ToString('N')+'.json'))
+                    if (-not $state.Count) { $state=@{Version=2;Base=$base;Branch=$branch;Aliases=@();Commit=$null;Hash=$before} }
+                    $json=ConvertTo-Json -InputObject @($registered+$entry) -Depth 4
+                    [IO.File]::WriteAllText($registry,$json+"`n",[Text.UTF8Encoding]::new($false))
+                    $state.Hash=Get-RswHash
+                    $verified.Clear()
+                    Save-RswJournal
+                    $keys[$entry.Name]='~/.ssh/'+$entry.FileName
+                    Write-Host 'Key registered locally; choose Review & publish to sync its public metadata. No server access has been granted.'
+                }
+                '6' {
+                    foreach ($entry in Get-RoamingSshKeys -Path $registry) {
+                        $identity=Join-Path (Join-Path $HOME '.ssh') $entry.FileName
+                        $status=if ((Test-Path -LiteralPath $identity) -and (Test-Path -LiteralPath ($identity+'.pub'))) {'Local files present (not a live hardware test)'} else {'Import needed / incomplete local pair'}
+                        Write-Host ("{0}: {1}`n  {2}`n  {3}" -f $entry.Name,$status,$entry.Fingerprint,$identity)
+                    }
+                }
                 'Q' { if ($state.Count) { Write-Host 'Pending work retained locally. Reopen this wizard, retest, then publish. No automatic push.' }; if (Get-Command Complete-TechMenuReturn -ErrorAction SilentlyContinue) { Complete-TechMenuReturn }; return }
-                default { Write-Host 'Choose 1, 2, 3, 4 or Q.' }
+                default { Write-Host 'Choose 1-6 or Q.' }
             }
         } catch { Write-Host "STOPPED: $_" -ForegroundColor Yellow }
     }
