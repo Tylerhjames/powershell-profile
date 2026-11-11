@@ -3,7 +3,7 @@ $source=Join-Path $PSScriptRoot '../Functions/Manage-RoamingSsh.ps1'
 $errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile($source,[ref]$null,[ref]$errors)
 if ($errors.Count) { throw $errors }
-foreach ($name in @('Get-RswBlocks','New-RswAuthorizeCommand','Invoke-RswWalkthrough')) {
+foreach ($name in @('Get-RswBlocks','New-RswAuthorizeCommand','Invoke-RswTests','Invoke-RswWalkthrough','Invoke-RswResume')) {
     $node=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name},$true)
     . ([scriptblock]::Create($node.Extent.Text))
 }
@@ -24,7 +24,7 @@ try {
         @{Answers=@('t','yes');Tests=1;Publish=1;Fail=$false},
         @{Answers=@('t',' YeS ');Tests=1;Publish=1;Fail=$false},
         @{Answers=@('t','');Tests=1;Publish=0;Fail=$false},
-        @{Answers=@('t','q');Tests=1;Publish=0;Fail=$true}
+        @{Answers=@('t','','q');Tests=1;Publish=0;Fail=$true}
     )) {
         $script:answers=[Collections.Generic.Queue[string]]::new([string[]]$scenario.Answers)
         $script:messages=[Collections.Generic.List[string]]::new()
@@ -46,5 +46,24 @@ try {
     $rejected=$false
     try {New-RswAuthorizeCommand tyler "sk-ssh-ed25519@openssh.com AAAA'bad"} catch {$rejected=$true}
     if(-not $rejected){throw 'Unsafe key accepted'}
-    Write-Output 'PASS: walkthrough defer, success, mixed-case yes, failed-test publishing block, target-account instructions and save confirmation.'
+    function Invoke-RswWalkthrough {
+        param($Alias,[switch]$DeferPublish)
+        if(-not $DeferPublish){throw 'Batch should offer publish once'}
+        $script:resumed.Add($Alias)
+        if(-not $script:stopResume){$verified[$Alias]=$state.Hash}
+    }
+    $state=@{Aliases=@('first','second','third');Hash='hash'}
+    $verified=@{first='hash'}
+    $script:resumed=[Collections.Generic.List[string]]::new()
+    $script:stopResume=$false
+    $script:answers=[Collections.Generic.Queue[string]]::new([string[]]@(''))
+    Invoke-RswResume
+    if(($script:resumed -join ',') -ne 'second,third' -or $script:answers.Count){throw 'Automatic pending batch failed'}
+    $verified=@{}; $script:resumed.Clear(); $script:stopResume=$true
+    Invoke-RswResume
+    if(($script:resumed -join ',') -ne 'first'){throw 'Quit must stop batch'}
+    $state=@{}; $script:resumed.Clear()
+    Invoke-RswResume
+    if($script:resumed.Count){throw 'Empty pending list should not start setup'}
+    Write-Output 'PASS: walkthrough, confirmations, automatic pending batch, verified-host skip, quit and empty-state behavior.'
 } finally { Remove-Item -LiteralPath $config }

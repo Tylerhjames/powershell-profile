@@ -28,7 +28,7 @@ No server authorization changes, key deletion, or hardware reset are performed.
    Existing entries are retained; running the same command again skips the exact existing key line.
    The command is highlighted in amber. **C** optionally copies only the public key for manual use.
    If already authorized, skip copying. The wizard does not run these server commands itself.
-5. Choose **T**, agree to the live test and select/touch the key. Unknown host keys must first
+5. Choose **T** to start the live test immediately, then select/touch the key. Unknown host keys must first
    be independently verified and accepted through a normal SSH connection.
    The test requires the remote command `echo ROAMING_SSH_VERIFIED` to work;
    appliances without this capability need manual validation outside the wizard.
@@ -39,6 +39,15 @@ No server authorization changes, key deletion, or hardware reset are performed.
 Failed/skipped tests block publishing. Option **3** retries a test; option **7**
 resumes the walkthrough. Choosing Q retains local work. Each changed alias needs
 a successful test against the current config in the same session.
+Option **3** accepts comma-separated aliases. Option **7** automatically resumes
+pending aliases that have not passed testing in this session, then offers one
+publication for the batch. Q stops the walkthrough and keeps the remaining work.
+Review & publish offers to test any
+pending aliases that have not passed, then continues with the batch publication.
+If any test fails, nothing is committed. Choose R to roll back the entire pending
+SSH config/registry batch, or Enter to keep changes and retry later. Rollback
+requires confirmation and keeps a local backup; server authorizations and local
+key files are not removed. Already committed batches require manual review.
 Tests use only the selected identity: no password, agent or reused SSH session.
 Local SSH overrides that change the resolved host/user/identity block verification.
 

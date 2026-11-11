@@ -57,7 +57,21 @@ $base=Invoke-RswGit @('rev-parse','HEAD')
 [IO.File]::WriteAllText($config,$new)
 $state=@{Base=$base; Branch='main'; Hash=(Get-RswHash); Aliases=@('proxy2'); Commit=$null}
 $verified=@{}
-Reject { Publish-RswChanges } 'Test proxy2'
+$script:answer='NO'
+function Read-Host { param($Prompt) $script:answer }
+Reject { Publish-RswChanges } 'all pending aliases must pass'
+$realTest=(Get-Item Function:Test-RswHost).ScriptBlock
+$script:testedAliases=[Collections.Generic.List[string]]::new()
+function Test-RswHost { param($Alias); $script:testedAliases.Add($Alias); $verified[$Alias]=$state.Hash }
+$state.Aliases=@('proxy2','second')
+$script:batchAnswers=[Collections.Generic.Queue[string]]::new([string[]]@('y','NO'))
+function Read-Host { param($Prompt); if(-not $script:batchAnswers.Count){throw 'Unexpected batch prompt'}; $script:batchAnswers.Dequeue() }
+Publish-RswChanges
+Assert (($script:testedAliases -join ',') -eq 'proxy2,second' -and $verified.second -eq $state.Hash) 'Publish runs every missing test in one batch'
+Assert ((Invoke-RswGit @('rev-parse','HEAD')) -eq $base) 'Batch tests do not commit before final confirmation'
+Set-Item Function:Test-RswHost $realTest
+function Read-Host { param($Prompt) $script:answer }
+$state.Aliases=@('proxy2')
 $verified.proxy2=$state.Hash
 [IO.File]::WriteAllText($registry,'[{}]')
 Reject { Publish-RswChanges } 'outside the wizard'
@@ -84,6 +98,20 @@ Assert ((Invoke-RswGit @('rev-parse','HEAD')) -eq ((Invoke-RswGit @('ls-remote',
 Assert (-not (Invoke-RswGit @('status','--porcelain'))) 'Fixture clean after publish'
 Reject { Publish-RswChanges } 'No wizard-owned'
 
+# Rollback restores only the pending SSH batch, retaining unrelated work.
+$localDir=$root
+function Get-RoamingSshKeys { @() }
+$savedConfig=[IO.File]::ReadAllText($config)
+$rollbackBase=Invoke-RswGit @('rev-parse','HEAD')
+[IO.File]::AppendAllText($config,"# pending change`n")
+[IO.File]::WriteAllText((Join-Path $repo 'unrelated.txt'),'keep me')
+$state=@{Base=$rollbackBase;Branch='main';Hash=(Get-RswHash);Aliases=@('proxy2');Commit=$null}
+Save-RswJournal
+$script:answer='YES'
+Invoke-RswRollback
+Assert ([IO.File]::ReadAllText($config).Replace("`r`n","`n") -eq $savedConfig.Replace("`r`n","`n")) 'Rollback restores batch baseline'
+Assert ((Test-Path (Join-Path $repo 'unrelated.txt')) -and -not $state.Count -and -not (Test-Path $journal)) 'Rollback preserves unrelated work and clears pending journal'
+
 # Effective configuration mismatch must stop before any live authentication.
 $verified=@{}
 function Invoke-RswSsh {
@@ -106,9 +134,10 @@ function Invoke-RswSsh {
     Assert ('PasswordAuthentication=no' -in $Arguments -and 'IdentityAgent=none' -in $Arguments -and 'ControlPath=none' -in $Arguments -and $Arguments[1] -eq 'none') 'Live test forbids password, agent and reused sessions'
     [pscustomobject]@{Code=$script:sshCode; Output=@($script:sshMarker)}
 }
-$script:answer='NO'
-Reject { Test-RswHost proxy2 } 'skipped'
-$script:answer='YES'
+# Selecting Test is sufficient authorization; fail if a second prompt appears.
+function Read-Host { throw 'Unexpected confirmation during connection test' }
+Test-RswHost proxy2
+Assert ($verified.proxy2 -eq (Get-RswHash)) 'Test starts directly without a second confirmation'
 $script:sshCode=255
 Reject { Test-RswHost proxy2 } 'test failed'
 $script:sshCode=0; $script:sshMarker='wrong marker'

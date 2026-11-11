@@ -101,7 +101,7 @@ function Manage-RoamingSsh {
     }
     function Test-RswHost {
         param([string]$Alias)
-        # A failed or skipped retest must invalidate any earlier success.
+        # A failed retest must invalidate any earlier success.
         $verified.Remove($Alias)
         if ($Alias -notmatch '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$') { throw 'Enter an explicit host alias.' }
         $block=@(Get-RswBlocks ([IO.File]::ReadAllText($config)) | Where-Object { $Alias -in $_.Names })
@@ -122,7 +122,6 @@ function Manage-RoamingSsh {
         }
         Write-Host "$Alias -> $($expected.User)@$($expected.HostName) using $($expected.IdentityFile)"
         Write-Host 'Live test uses public-key authentication only. Verify unknown host fingerprints separately first.'
-        if ((Read-Host 'Test now? Type YES').Trim() -ine 'YES') { throw 'Live test skipped: NOT VERIFIED. Saved settings remain local; choose 7 to resume the walkthrough.' }
         $identity=$expected.IdentityFile -replace '^~/',($HOME.Replace('\','/')+'/')
         if (-not (Test-Path -LiteralPath $identity)) { throw 'Identity file missing. Import the selected key on this computer first.' }
         # Isolate from local Host/Match settings, agent identities and multiplexed
@@ -147,8 +146,10 @@ function Manage-RoamingSsh {
             $status=Invoke-RswGit @('status','--porcelain','--untracked-files=no')
             if (-not (Test-RswPublishStatus $status)) { throw 'Only unstaged wizard SSH config/registry changes may be published. Review other tracked/index changes first.' }
         }
-        foreach ($alias in $state.Aliases) {
-            if ($verified[$alias] -ne $state.Hash) { throw "Test $alias successfully in this wizard session before publishing." }
+        $pending=@($state.Aliases | Where-Object { $verified[$_] -ne $state.Hash })
+        if ($pending.Count) {
+            if ((Read-Host "Not yet verified: $($pending -join ', '). Run tests now? [Y/N]").Trim() -notin @('Y','YES')) { throw 'Not published: all pending aliases must pass testing.' }
+            if (-not (Invoke-RswTests ($pending -join ','))) { return }
         }
         Invoke-RswGit @('fetch','origin') | Write-Host
         $remote=Invoke-RswGit @('rev-parse',"refs/remotes/origin/$branch")
@@ -178,6 +179,39 @@ function Manage-RoamingSsh {
         $state.Clear()
     }
 
+    function Invoke-RswRollback {
+        if (-not $state.Count -or $state.Commit) { throw 'Rollback is available only for uncommitted wizard changes.' }
+        if ((Get-RswHash) -ne $state.Hash -or (Invoke-RswGit @('rev-parse','HEAD')) -ne $state.Base -or (Invoke-RswGit @('branch','--show-current')) -ne $state.Branch) { throw 'Repository changed; rollback stopped for manual review.' }
+        if (Invoke-RswGit (@('diff','--cached','--name-only','--')+$managed)) { throw 'SSH files are staged; review before rollback.' }
+        if ((Read-Host "Roll back ALL pending aliases/registry edits ($($state.Aliases -join ', '))? Type YES").Trim() -ine 'YES') { Write-Host 'Changes retained locally.'; return }
+        if ((Get-RswHash) -ne $state.Hash -or (Invoke-RswGit @('rev-parse','HEAD')) -ne $state.Base -or (Invoke-RswGit @('branch','--show-current')) -ne $state.Branch) { throw 'Repository changed during confirmation; rollback stopped.' }
+        $backupDir=Join-Path $localDir ('rollback-'+[guid]::NewGuid().ToString('N'))
+        $null=New-Item -ItemType Directory -Path $backupDir
+        Copy-Item -LiteralPath $config -Destination (Join-Path $backupDir 'roaming.conf')
+        Copy-Item -LiteralPath $registry -Destination (Join-Path $backupDir 'keys.json')
+        Invoke-RswGit (@('restore',('--source='+$state.Base),'--worktree','--')+$managed) | Out-Null
+        if (Test-Path -LiteralPath $journal) { Remove-Item -LiteralPath $journal }
+        $state.Clear(); $verified.Clear()
+        $keys.Clear()
+        foreach ($entry in Get-RoamingSshKeys -Path $registry) { $keys[$entry.Name]='~/.ssh/'+$entry.FileName }
+        Write-Host "Pending SSH batch rolled back. Backup: $backupDir. Server authorizations and local keys retained."
+    }
+    function Invoke-RswTests {
+        param([string]$Aliases)
+        $requested=@($Aliases -split '[,\s]+' | Where-Object { $_ } | Select-Object -Unique)
+        if (-not $requested.Count) { throw 'Enter at least one alias.' }
+        foreach ($alias in $requested) {
+            try { Test-RswHost $alias }
+            catch {
+                Write-Host "NOT VERIFIED: $alias — $_" -ForegroundColor Yellow
+                if ($state.Count -and -not $state.Commit) {
+                    if ((Read-Host '[R] Roll back pending SSH batch  [Enter] Keep changes and retry later').Trim() -ieq 'R') { Invoke-RswRollback }
+                }
+                return $false
+            }
+        }
+        return $true
+    }
     function Get-RswPublicKey {
         param([string]$Path,[string]$ExpectedFingerprint)
         if (-not (Test-Path -LiteralPath $Path)) { throw 'Public key missing. Choose 2 to import it, then 7 to resume.' }
@@ -197,7 +231,7 @@ function Manage-RoamingSsh {
         'sudo -u ''{0}'' -H sh -c ''set -eu; umask 077; mkdir -p "$HOME/.ssh"; touch "$HOME/.ssh/authorized_keys"; chmod 700 "$HOME/.ssh"; chmod 600 "$HOME/.ssh/authorized_keys"; if ! grep -qxF -- "$1" "$HOME/.ssh/authorized_keys"; then printf "\n%s\n" "$1" >> "$HOME/.ssh/authorized_keys"; fi; echo "Key authorized"'' sh ''{1}''' -f $User,$PublicKey
     }
     function Invoke-RswWalkthrough {
-        param([string]$Alias)
+        param([string]$Alias,[switch]$DeferPublish)
         $blocks=@(Get-RswBlocks ([IO.File]::ReadAllText($config)) | Where-Object { $Alias -in $_.Names })
         if ($blocks.Count -ne 1 -or -not $blocks[0].Simple) { throw 'Choose one existing simple alias.' }
         $fields=$blocks[0].Fields
@@ -239,21 +273,32 @@ function Manage-RoamingSsh {
                 'T' {
                     Write-Host "`nSTEP 2 OF 3 — TEST CONNECTION"
                     Write-Host 'Unknown host? Independently verify its host fingerprint, then accept it using a normal SSH connection before this test.'
-                    try { Test-RswHost $Alias }
-                    catch { Write-Host "NOT VERIFIED: $_" -ForegroundColor Yellow; Write-Host 'Settings retained locally. Correct the issue and choose T to retry, or Q to continue later.'; continue }
+                    if (-not (Invoke-RswTests $Alias)) { if (-not $state.Count) { return }; continue }
+                    if ($DeferPublish) { return }
                     Write-Host "`nSTEP 3 OF 3 — REVIEW & PUBLISH"
                     if (-not $state.Count) { Write-Host 'No pending wizard changes to publish.'; return }
-                    $pending=@($state.Aliases | Where-Object { $verified[$_] -ne $state.Hash })
-                    if ($pending.Count) { Write-Host "Also test these pending aliases before publishing: $($pending -join ', '). Use option 3 or 7."; return }
                     Write-Host 'The next step shows the changes and Git destination before asking you to confirm.'
                     if ((Read-Host 'Review and publish now? Type YES; Enter to do it later').Trim() -ieq 'YES') { Publish-RswChanges }
                     else { Write-Host 'Verified in this session; saved locally, NOT PUBLISHED. Choose 4 to publish.' }
                     return
                 }
-                'Q' { Write-Host 'Saved locally, NOT PUBLISHED. Choose 7 and this alias to resume.'; return }
+                'Q' { Write-Host 'Saved locally, NOT PUBLISHED. Choose 7 to resume pending setup.'; return }
                 default { Write-Host 'Choose S, C, T or Q.' }
             }
         }
+    }
+
+    function Invoke-RswResume {
+        if (-not $state.Count) { Write-Host 'No pending setup. Choose 1 to add/edit a server, or 3 to test an existing alias.'; return }
+        $pending=@($state.Aliases | Where-Object { $verified[$_] -ne $state.Hash } | Select-Object -Unique)
+        if ($pending.Count) { Write-Host "Resuming: $($pending -join ', ')" }
+        foreach ($alias in $pending) {
+            Invoke-RswWalkthrough $alias -DeferPublish
+            # Q or rollback must return to the menu, not advance to another host.
+            if (-not $state.Count -or $verified[$alias] -ne $state.Hash) { return }
+        }
+        if ((Read-Host 'Pending setup ready. Review and publish now? Type YES; Enter for later').Trim() -ieq 'YES') { Publish-RswChanges }
+        else { Write-Host 'Saved locally, NOT PUBLISHED. Choose 4 or 7 when ready.' }
     }
 
     $localDir=Join-Path $HOME '.ssh/roaming-wizard'
@@ -314,7 +359,7 @@ function Manage-RoamingSsh {
                     } else { Initialize-RoamingSsh }
                     Write-Host 'Local setup only. No repository changes to publish.'
                 }
-                '3' { Test-RswHost (Read-Host 'Alias to test') }
+                '3' { $null=Invoke-RswTests (Read-Host 'Aliases to test (comma separated)') }
                 '4' { Publish-RswChanges }
                 '5' {
                     if ($state.Commit) { throw 'Finish publishing the pending commit before adding a key.' }
@@ -346,7 +391,9 @@ function Manage-RoamingSsh {
                         Write-Host ("{0}: {1}`n  {2}`n  {3}" -f $entry.Name,$status,$entry.Fingerprint,$identity)
                     }
                 }
-                '7' { Invoke-RswWalkthrough (Read-Host 'Alias to finish setting up') }
+                '7' {
+                    Invoke-RswResume
+                }
                 'Q' { if ($state.Count) { Write-Host 'Pending work retained locally. Reopen this wizard, retest, then publish. No automatic push.' }; if (Get-Command Complete-TechMenuReturn -ErrorAction SilentlyContinue) { Complete-TechMenuReturn }; return }
                 default { Write-Host 'Choose 1-7 or Q.' }
             }
