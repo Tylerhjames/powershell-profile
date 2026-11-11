@@ -9,27 +9,35 @@ Existing Nano/NFC aliases, filenames, and fingerprints are unchanged. The menu i
 4. Review & publish
 5. Add a key (enroll or recover)
 6. View registered keys and local status
+7. Resume authorization / test / publish walkthrough
 Q. Return to menu
 
 No server authorization changes, key deletion, or hardware reset are performed.
 
 ## Add or edit a server
 
-1. Authorize the selected key's public key on the server separately.
+1. Keep an existing SSH session open on the server under an account with sudo access.
 2. Choose **1**, enter the alias, hostname/IP, username and a registered key name (including `Nano` or `NFC`).
    Editing an existing block preserves all of its aliases. Advanced blocks
    (ports, wildcard patterns, extra directives) must be edited manually.
-3. Review the endpoint/key and type `YES` to save. The old config is backed up
+3. Review the endpoint/key and type `yes` to save (any capitalization accepted). The old config is backed up
    under `~/.ssh/roaming-wizard/`, outside Git.
-4. Agree to the live test and select/touch the key. Unknown host keys must first
+4. Follow the authorization walkthrough. Verify the target account exists. **S** copies
+   the Linux server command; paste/run it in the existing server session. Then **C**
+   copies the selected public key after checking its registered fingerprint. Paste the key
+   into the waiting server command, press Enter, then Ctrl+D. Existing entries are retained.
+   If already authorized, skip copying. The wizard does not run these server commands itself.
+5. Choose **T**, agree to the live test and select/touch the key. Unknown host keys must first
    be independently verified and accepted through a normal SSH connection.
    The test requires the remote command `echo ROAMING_SSH_VERIFIED` to work;
    appliances without this capability need manual validation outside the wizard.
-5. Choose **4** to review the Git diff and destination. Type `YES` to commit and
+6. After successful testing, accept the offer to review/publish (or choose **4** later).
+   Review the Git diff and destination. Type `yes` to commit and
    push. Success includes the commit ID and confirmation from the remote.
 
-Failed/skipped tests block publishing. Option **3** retries a test. Each changed
-alias needs a successful test against the current config in the same session.
+Failed/skipped tests block publishing. Option **3** retries a test; option **7**
+resumes the walkthrough. Choosing Q retains local work. Each changed alias needs
+a successful test against the current config in the same session.
 Tests use only the selected identity: no password, agent or reused SSH session.
 Local SSH overrides that change the resolved host/user/identity block verification.
 

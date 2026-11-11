@@ -122,7 +122,7 @@ function Manage-RoamingSsh {
         }
         Write-Host "$Alias -> $($expected.User)@$($expected.HostName) using $($expected.IdentityFile)"
         Write-Host 'Live test uses public-key authentication only. Verify unknown host fingerprints separately first.'
-        if ((Read-Host 'Test now? Type YES') -cne 'YES') { throw 'Live test skipped: NOT VERIFIED.' }
+        if ((Read-Host 'Test now? Type YES').Trim() -ine 'YES') { throw 'Live test skipped: NOT VERIFIED. Saved settings remain local; choose 7 to resume the walkthrough.' }
         $identity=$expected.IdentityFile -replace '^~/',($HOME.Replace('\','/')+'/')
         if (-not (Test-Path -LiteralPath $identity)) { throw 'Identity file missing. Import the selected key on this computer first.' }
         # Isolate from local Host/Match settings, agent identities and multiplexed
@@ -157,7 +157,7 @@ function Manage-RoamingSsh {
         else { Invoke-RswGit (@('diff','--')+$managed) | Write-Host }
         $pushUrl=Invoke-RswGit @('remote','get-url','--push','origin')
         Write-Host "Destination: $pushUrl / $branch"
-        if ((Read-Host 'Commit (if needed) and push these changes? Type YES') -cne 'YES') { Write-Host 'Saved locally; not published.'; return }
+        if ((Read-Host 'Commit (if needed) and push these changes? Type YES').Trim() -ine 'YES') { Write-Host 'Saved locally; not published. Choose 4 when ready.'; return }
         if ((Get-RswHash) -ne $state.Hash -or (Invoke-RswGit @('rev-parse','HEAD')) -ne $head -or (Invoke-RswGit @('branch','--show-current')) -ne $branch) { throw 'Repository changed during confirmation. Review and retest.' }
         $currentStatus=Invoke-RswGit @('status','--porcelain','--untracked-files=no')
         if (($state.Commit -and $currentStatus) -or (-not $state.Commit -and -not (Test-RswPublishStatus $currentStatus))) { throw 'Index or tracked files changed during confirmation.' }
@@ -178,6 +178,67 @@ function Manage-RoamingSsh {
         $state.Clear()
     }
 
+    function Invoke-RswWalkthrough {
+        param([string]$Alias)
+        $blocks=@(Get-RswBlocks ([IO.File]::ReadAllText($config)) | Where-Object { $Alias -in $_.Names })
+        if ($blocks.Count -ne 1 -or -not $blocks[0].Simple) { throw 'Choose one existing simple alias.' }
+        $fields=$blocks[0].Fields
+        $entry=@(Get-RoamingSshKeys -Path $registry | Where-Object { ('~/.ssh/'+$_.FileName) -ceq $fields.IdentityFile })
+        if ($entry.Count -ne 1) { throw 'Alias must use one registered key.' }
+        $userName=$fields.User
+        if ($userName -notmatch '^[a-zA-Z_][a-zA-Z0-9_.-]*[$]?$') { throw 'Unsupported username for the Linux walkthrough.' }
+        $pub=Join-Path (Join-Path $HOME '.ssh') ($entry[0].FileName+'.pub')
+        Write-Host "`nSTEP 1 OF 3 — AUTHORIZE THE KEY"
+        Write-Host "Alias: $Alias -> $userName@$($fields.HostName) | Key: $($entry[0].Name)"
+        Write-Host 'Keep your existing SSH session open. Run the following ON THE SERVER, not in local PowerShell.'
+        Write-Host 'These commands are for Linux/OpenSSH. For a switch/appliance, use its key authorization procedure.'
+        Write-Host "First check the target account: id '$userName'"
+        Write-Host 'If the account does not exist, stop and create it or correct the alias username.'
+        Write-Host 'From an account with sudo access, run:'
+        $command='sudo -u ''{0}'' -H sh -c ''umask 077; mkdir -p "$HOME/.ssh"; cat >> "$HOME/.ssh/authorized_keys"; chmod 700 "$HOME/.ssh"; chmod 600 "$HOME/.ssh/authorized_keys"''' -f $userName
+        Write-Host $command
+        Write-Host 'Then copy/paste the PUBLIC KEY as a single line, press Enter, then Ctrl+D.'
+        Write-Host 'The command appends the key and preserves existing entries. If already authorized, proceed to testing.'
+        Write-Host 'This wizard displays instructions; it does not change the server or grant sudo privileges.'
+        while ($true) {
+            Write-Host ('─' * 63)
+            Write-Host '[S] Copy server command  [C] Copy public key  [T] Key authorized — test connection  [Q] Later'
+            switch ((Read-Host 'Choose').Trim().ToUpperInvariant()) {
+                'S' {
+                    Set-Clipboard -Value $command
+                    Write-Host "Server command copied. Paste/run it in your existing session on $($fields.HostName)."
+                    Write-Host 'Once it waits for input, return here and choose C. Paste the key there, Enter, then Ctrl+D.'
+                }
+                'C' {
+                    if (-not (Test-Path -LiteralPath $pub)) { Write-Host 'Public key missing. Choose 2 to import this key, then 7 to resume.'; continue }
+                    $exe=Get-ProfileGitSsh
+                    if (-not $exe) { throw 'Git OpenSSH is required to verify the public key.' }
+                    $keygen=Join-Path (Split-Path $exe -Parent) 'ssh-keygen.exe'
+                    $fingerprint=& $keygen -lf $pub
+                    if ($LASTEXITCODE -ne 0 -or (("$fingerprint" -split '\s+')[1] -cne $entry[0].Fingerprint)) { throw 'Public key does not match the registered fingerprint; nothing copied.' }
+                    Set-Clipboard -Value ([IO.File]::ReadAllText($pub).Trim())
+                    Write-Host "Public key copied for $userName. Paste it into the waiting server command, Enter, then Ctrl+D."
+                }
+                'T' {
+                    Write-Host "`nSTEP 2 OF 3 — TEST CONNECTION"
+                    Write-Host 'Unknown host? Independently verify its host fingerprint, then accept it using a normal SSH connection before this test.'
+                    try { Test-RswHost $Alias }
+                    catch { Write-Host "NOT VERIFIED: $_" -ForegroundColor Yellow; Write-Host 'Settings retained locally. Correct the issue and choose T to retry, or Q to continue later.'; continue }
+                    Write-Host "`nSTEP 3 OF 3 — REVIEW & PUBLISH"
+                    if (-not $state.Count) { Write-Host 'No pending wizard changes to publish.'; return }
+                    $pending=@($state.Aliases | Where-Object { $verified[$_] -ne $state.Hash })
+                    if ($pending.Count) { Write-Host "Also test these pending aliases before publishing: $($pending -join ', '). Use option 3 or 7."; return }
+                    Write-Host 'The next step shows the changes and Git destination before asking you to confirm.'
+                    if ((Read-Host 'Review and publish now? Type YES; Enter to do it later').Trim() -ieq 'YES') { Publish-RswChanges }
+                    else { Write-Host 'Verified in this session; saved locally, NOT PUBLISHED. Choose 4 to publish.' }
+                    return
+                }
+                'Q' { Write-Host 'Saved locally, NOT PUBLISHED. Choose 7 and this alias to resume.'; return }
+                default { Write-Host 'Choose S, C, T or Q.' }
+            }
+        }
+    }
+
     $localDir=Join-Path $HOME '.ssh/roaming-wizard'
     $null=New-Item -ItemType Directory -Path $localDir -Force
     $repoId=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($repo))).Substring(0,16)
@@ -192,6 +253,7 @@ function Manage-RoamingSsh {
         Write-Host '[4] Review & publish'
         Write-Host '[5] Add a key (enroll or recover)'
         Write-Host '[6] View registered keys and local status'
+        Write-Host '[7] Resume authorization / test / publish walkthrough'
         if ($state.Count) { Write-Host "Pending aliases: $($state.Aliases -join ', '). Commit: $($state.Commit). Tests must pass in this session." }
         Write-Host ('─' * 63)
         Write-Host '[Q] Return to menu...'
@@ -209,8 +271,8 @@ function Manage-RoamingSsh {
                     $proposal=New-RswConfig $original $alias $address $userName $key
                     $changed=@(Get-RswBlocks $proposal | Where-Object { $alias -in $_.Names })[0]
                     Write-Host "Aliases: $($changed.Names -join ', ') -> $userName@$address / $($keys[$key])"
-                    Write-Host 'Authorize the public key on the server separately. This wizard does not change the server.'
-                    if ((Read-Host 'Save this configuration? Type YES') -cne 'YES') { break }
+                    Write-Host 'After saving: authorize the public key, test the connection, then review and publish.'
+                    if ((Read-Host 'Save this configuration? Type YES').Trim() -ine 'YES') { Write-Host 'Cancelled: this alias change was NOT saved.'; break }
                     $backup=Join-Path $localDir ("roaming-"+[guid]::NewGuid().ToString('N')+'.conf')
                     Copy-Item -LiteralPath $config -Destination $backup
                     if (-not $state.Count) {
@@ -225,7 +287,7 @@ function Manage-RoamingSsh {
                     $verified.Clear()
                     Save-RswJournal
                     Write-Host "Saved locally. Backup: $backup. NOT PUBLISHED."
-                    Test-RswHost $alias
+                    Invoke-RswWalkthrough $alias
                 }
                 '2' {
                     $key=Read-Host ('Key to import: '+(($keys.Keys | Sort-Object) -join ', ')+'; Enter only to link configuration')
@@ -267,8 +329,9 @@ function Manage-RoamingSsh {
                         Write-Host ("{0}: {1}`n  {2}`n  {3}" -f $entry.Name,$status,$entry.Fingerprint,$identity)
                     }
                 }
+                '7' { Invoke-RswWalkthrough (Read-Host 'Alias to finish setting up') }
                 'Q' { if ($state.Count) { Write-Host 'Pending work retained locally. Reopen this wizard, retest, then publish. No automatic push.' }; if (Get-Command Complete-TechMenuReturn -ErrorAction SilentlyContinue) { Complete-TechMenuReturn }; return }
-                default { Write-Host 'Choose 1-6 or Q.' }
+                default { Write-Host 'Choose 1-7 or Q.' }
             }
         } catch { Write-Host "STOPPED: $_" -ForegroundColor Yellow }
     }
