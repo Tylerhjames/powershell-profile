@@ -178,6 +178,24 @@ function Manage-RoamingSsh {
         $state.Clear()
     }
 
+    function Get-RswPublicKey {
+        param([string]$Path,[string]$ExpectedFingerprint)
+        if (-not (Test-Path -LiteralPath $Path)) { throw 'Public key missing. Choose 2 to import it, then 7 to resume.' }
+        $exe=Get-ProfileGitSsh
+        if (-not $exe) { throw 'Git OpenSSH is required to verify the public key.' }
+        $keygen=Join-Path (Split-Path $exe -Parent) 'ssh-keygen.exe'
+        $fingerprint=& $keygen -lf $Path
+        if ($LASTEXITCODE -ne 0 -or (("$fingerprint" -split '\s+')[1] -cne $ExpectedFingerprint)) { throw 'Public key does not match the registered fingerprint; nothing copied.' }
+        $text=[IO.File]::ReadAllText($Path).Trim()
+        if ($text -notmatch '\A(sk-ssh-ed25519@openssh.com|sk-ecdsa-sha2-nistp256@openssh.com) ([A-Za-z0-9+/]+={0,2})(?: [^\r\n]*)?\z') { throw 'Expected one supported security-key public key line.' }
+        # Omit the optional comment so untrusted text never becomes shell syntax.
+        "$($Matches[1]) $($Matches[2])"
+    }
+    function New-RswAuthorizeCommand {
+        param([string]$User,[string]$PublicKey)
+        if ($User -notmatch '^[a-zA-Z_][a-zA-Z0-9_.-]*[$]?$' -or $PublicKey -notmatch '\A(sk-ssh-ed25519@openssh.com|sk-ecdsa-sha2-nistp256@openssh.com) [A-Za-z0-9+/]+={0,2}\z') { throw 'Invalid authorization command input.' }
+        'sudo -u ''{0}'' -H sh -c ''set -eu; umask 077; mkdir -p "$HOME/.ssh"; touch "$HOME/.ssh/authorized_keys"; chmod 700 "$HOME/.ssh"; chmod 600 "$HOME/.ssh/authorized_keys"; if ! grep -qxF -- "$1" "$HOME/.ssh/authorized_keys"; then printf "\n%s\n" "$1" >> "$HOME/.ssh/authorized_keys"; fi; echo "Key authorized"'' sh ''{1}''' -f $User,$PublicKey
+    }
     function Invoke-RswWalkthrough {
         param([string]$Alias)
         $blocks=@(Get-RswBlocks ([IO.File]::ReadAllText($config)) | Where-Object { $Alias -in $_.Names })
@@ -190,16 +208,15 @@ function Manage-RoamingSsh {
         $pub=Join-Path (Join-Path $HOME '.ssh') ($entry[0].FileName+'.pub')
         Write-Host "`nSTEP 1 OF 3 — AUTHORIZE THE KEY"
         Write-Host "Alias: $Alias -> $userName@$($fields.HostName) | Key: $($entry[0].Name)"
-        Write-Host 'Keep your existing SSH session open. Run the following ON THE SERVER, not in local PowerShell.'
-        Write-Host 'These commands are for Linux/OpenSSH. For a switch/appliance, use its key authorization procedure.'
-        Write-Host "First check the target account: id '$userName'"
-        Write-Host 'If the account does not exist, stop and create it or correct the alias username.'
-        Write-Host 'From an account with sudo access, run:'
-        $command='sudo -u ''{0}'' -H sh -c ''umask 077; mkdir -p "$HOME/.ssh"; cat >> "$HOME/.ssh/authorized_keys"; chmod 700 "$HOME/.ssh"; chmod 600 "$HOME/.ssh/authorized_keys"''' -f $userName
-        Write-Host $command
-        Write-Host 'Then copy/paste the PUBLIC KEY as a single line, press Enter, then Ctrl+D.'
-        Write-Host 'The command appends the key and preserves existing entries. If already authorized, proceed to testing.'
-        Write-Host 'This wizard displays instructions; it does not change the server or grant sudo privileges.'
+        $publicKey=Get-RswPublicKey $pub $entry[0].Fingerprint
+        $command=New-RswAuthorizeCommand $userName $publicKey
+        Write-Host "ON SERVER $($fields.HostName) — existing Linux SSH session with sudo access:"
+        if (Get-Command Write-Color -ErrorAction SilentlyContinue) { Write-Color $command 'Warn' }
+        else { Write-Host $command -ForegroundColor Yellow }
+        Write-Host '1. Choose S to copy the complete command (public key included).'
+        Write-Host '2. Paste into your server session and press Enter. Wait for: Key authorized.'
+        Write-Host '3. Return here and choose T to test.'
+        Write-Host "Existing keys are preserved. Account '$userName' must already exist. Already authorized? Choose T."
         while ($true) {
             Write-Host ('─' * 63)
             Write-Host '[S] Copy server command  [C] Copy public key  [T] Key authorized — test connection  [Q] Later'
@@ -207,7 +224,7 @@ function Manage-RoamingSsh {
                 'S' {
                     Set-Clipboard -Value $command
                     Write-Host "Server command copied. Paste/run it in your existing session on $($fields.HostName)."
-                    Write-Host 'Once it waits for input, return here and choose C. Paste the key there, Enter, then Ctrl+D.'
+                    Write-Host 'Press Enter. After Key authorized appears, return here and choose T.'
                 }
                 'C' {
                     if (-not (Test-Path -LiteralPath $pub)) { Write-Host 'Public key missing. Choose 2 to import this key, then 7 to resume.'; continue }
@@ -216,8 +233,8 @@ function Manage-RoamingSsh {
                     $keygen=Join-Path (Split-Path $exe -Parent) 'ssh-keygen.exe'
                     $fingerprint=& $keygen -lf $pub
                     if ($LASTEXITCODE -ne 0 -or (("$fingerprint" -split '\s+')[1] -cne $entry[0].Fingerprint)) { throw 'Public key does not match the registered fingerprint; nothing copied.' }
-                    Set-Clipboard -Value ([IO.File]::ReadAllText($pub).Trim())
-                    Write-Host "Public key copied for $userName. Paste it into the waiting server command, Enter, then Ctrl+D."
+                    Set-Clipboard -Value $publicKey
+                    Write-Host 'Public key only copied for manual use. S copies the complete Linux command.'
                 }
                 'T' {
                     Write-Host "`nSTEP 2 OF 3 — TEST CONNECTION"

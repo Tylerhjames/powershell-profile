@@ -3,7 +3,7 @@ $source=Join-Path $PSScriptRoot '../Functions/Manage-RoamingSsh.ps1'
 $errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile($source,[ref]$null,[ref]$errors)
 if ($errors.Count) { throw $errors }
-foreach ($name in @('Get-RswBlocks','Invoke-RswWalkthrough')) {
+foreach ($name in @('Get-RswBlocks','New-RswAuthorizeCommand','Invoke-RswWalkthrough')) {
     $node=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name},$true)
     . ([scriptblock]::Create($node.Extent.Text))
 }
@@ -11,6 +11,7 @@ $config=[IO.Path]::GetTempFileName()
 try {
     [IO.File]::WriteAllText($config,"Host fixture`n HostName 192.0.2.1`n User tyler`n IdentityFile ~/.ssh/fixture`n IdentitiesOnly yes`nHost *`n")
     function Get-RoamingSshKeys { [pscustomobject]@{Name='Fixture';FileName='fixture';Fingerprint='fixture'} }
+    function Get-RswPublicKey { 'sk-ssh-ed25519@openssh.com AAAA' }
     function Write-Host { param($Object,$ForegroundColor); $script:messages.Add([string]$Object) }
     function Read-Host { if (-not $script:answers.Count) {throw 'Unexpected prompt'}; $script:answers.Dequeue() }
     function Test-RswHost { $script:testCalls++; if($script:failTest){throw 'Simulated login failure'}; $verified.fixture='hash' }
@@ -32,7 +33,7 @@ try {
         Invoke-RswWalkthrough fixture
         if($script:testCalls -ne $scenario.Tests -or $script:publishCalls -ne $scenario.Publish -or $script:answers.Count) {throw 'Walkthrough progression failed'}
         if(($script:messages -join "`n") -notmatch "sudo -u 'tyler'") {throw 'Target-account instructions missing'}
-        if($scenario.Answers[0] -eq 's' -and $script:copied -notmatch 'cat >>') {throw 'Append command not copied'}
+        if($scenario.Answers[0] -eq 's' -and ($script:copied -notmatch 'grep -qxF' -or $script:copied -notmatch 'sk-ssh-ed25519@openssh.com AAAA')) {throw 'Complete command with key not copied'}
     }
     # Evaluate the actual save-confirmation condition with different responses.
     $condition=$ast.Find({param($n) $n -is [Management.Automation.Language.IfStatementAst] -and $n.Extent.Text -match 'Save this configuration'},$true).Clauses[0].Item1.Extent.Text
@@ -42,5 +43,8 @@ try {
     }
     $script:answers=[Collections.Generic.Queue[string]]::new([string[]]@(''))
     if(-not (& ([scriptblock]::Create($condition)))) {throw 'Blank should cancel'}
+    $rejected=$false
+    try {New-RswAuthorizeCommand tyler "sk-ssh-ed25519@openssh.com AAAA'bad"} catch {$rejected=$true}
+    if(-not $rejected){throw 'Unsafe key accepted'}
     Write-Output 'PASS: walkthrough defer, success, mixed-case yes, failed-test publishing block, target-account instructions and save confirmation.'
 } finally { Remove-Item -LiteralPath $config }

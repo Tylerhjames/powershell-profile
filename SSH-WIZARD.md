@@ -23,9 +23,10 @@ No server authorization changes, key deletion, or hardware reset are performed.
 3. Review the endpoint/key and type `yes` to save (any capitalization accepted). The old config is backed up
    under `~/.ssh/roaming-wizard/`, outside Git.
 4. Follow the authorization walkthrough. Verify the target account exists. **S** copies
-   the Linux server command; paste/run it in the existing server session. Then **C**
-   copies the selected public key after checking its registered fingerprint. Paste the key
-   into the waiting server command, press Enter, then Ctrl+D. Existing entries are retained.
+   the complete Linux server command with the verified public key already included.
+   Paste it into the existing server session and press Enter. Wait for `Key authorized`.
+   Existing entries are retained; running the same command again skips the exact existing key line.
+   The command is highlighted in amber. **C** optionally copies only the public key for manual use.
    If already authorized, skip copying. The wizard does not run these server commands itself.
 5. Choose **T**, agree to the live test and select/touch the key. Unknown host keys must first
    be independently verified and accepted through a normal SSH connection.
