@@ -10,9 +10,24 @@ Existing Nano/NFC aliases, filenames, and fingerprints are unchanged. The menu i
 5. Add a key (enroll or recover)
 6. View registered keys and local status
 7. Resume authorization / test / publish walkthrough
+8. Browse/search configured aliases (grouped by group and server)
 Q. Return to menu
 
 No server authorization changes, key deletion, or hardware reset are performed.
+
+## Browse and organize aliases
+
+Option **8** keeps aliases for the same server together under a Group heading.
+**S** searches group, alias, address, username or key name (literal, case-insensitive);
+**A** shows all; **Q** or Enter returns to setup. Existing aliases start under
+**Ungrouped** until assigned a group. Browsing never changes SSH settings.
+
+When adding/editing a server, **Group** is optional. Enter keeps the existing group;
+`-` clears it. A new alias suggests the group already used for that server when
+there is one unambiguous match. Group applies to that host block and all its aliases;
+separate key blocks can be given the same group. Labels are stored as
+`# RoamingGroup: RDC` comments inside host blocks, so SSH ignores them. Existing
+aliases are preserved. Group changes use the normal save/test/publish workflow.
 
 ## Add or edit a server
 

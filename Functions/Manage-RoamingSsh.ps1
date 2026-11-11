@@ -46,18 +46,23 @@ function Manage-RoamingSsh {
             $stop = if ($end.Count) { $end[0] } else { $lines.Count }
             $names = ($lines[$start] -replace '^\s*Host\s+','').Trim() -split '\s+'
             $fields = @{}
+            $group = ''
             $simple = $true
             for ($j=$start+1; $j -lt $stop; $j++) {
                 $line = $lines[$j].Trim()
+                if ($line -match '^#\s*RoamingGroup:\s*(.*)$') { $group=$Matches[1].Trim(); continue }
                 if (-not $line -or $line.StartsWith('#')) { continue }
                 if ($line -notmatch '^(HostName|User|IdentitiesOnly|IdentityFile)\s+(\S+)$' -or $fields.ContainsKey($Matches[1])) { $simple=$false; continue }
                 $fields[$Matches[1]]=$Matches[2]
             }
-            [pscustomobject]@{Start=$start; Stop=$stop; Names=$names; Fields=$fields; Simple=$simple}
+            [pscustomobject]@{Start=$start; Stop=$stop; Names=$names; Fields=$fields; Simple=$simple; Group=$group}
         }
     }
     function New-RswConfig {
-        param([string]$Text,[string]$Alias,[string]$Address,[string]$User,[string]$Key)
+        param([string]$Text,[string]$Alias,[string]$Address,[string]$User,[string]$Key,[string]$Group)
+        $groupSupplied=$PSBoundParameters.ContainsKey('Group')
+        $Group=$Group.Trim()
+        if ($Group.Length -gt 60 -or $Group -match '[\x00-\x1f\x7f-\x9f]') { throw 'Group: use up to 60 characters on one line.' }
         if ($Alias -notmatch '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$') { throw 'Alias: letters, numbers, dash or underscore only.' }
         if ($Address -notmatch '^[a-zA-Z0-9][a-zA-Z0-9.:-]*$') { throw 'Enter a plain hostname or IP address, without spaces or SSH options.' }
         if ($User -notmatch '^[a-zA-Z_][a-zA-Z0-9_.-]*[$]?$') { throw 'Enter a plain login username.' }
@@ -70,11 +75,12 @@ function Manage-RoamingSsh {
         $names = $Alias
         if ($found.Count) {
             $block=$found[0]
+            if (-not $groupSupplied) { $Group=$block.Group }
             if (-not $block.Simple -or @($block.Names | Where-Object { $_ -match '[*?!]' }).Count) { throw 'This block uses advanced settings; edit it manually.' }
             $names=$block.Names -join ' '
             # Preserve comments and whitespace adjacent to existing blocks.
             for ($i=$block.Stop-1; $i -gt $block.Start; $i--) {
-                if ($lines[$i] -match '^\s*(HostName|User|IdentitiesOnly|IdentityFile)\s+') { $lines.RemoveAt($i) }
+                if ($lines[$i] -match '^\s*(HostName|User|IdentitiesOnly|IdentityFile)\s+' -or $lines[$i] -match '^\s*#\s*RoamingGroup:') { $lines.RemoveAt($i) }
             }
             $lines.RemoveAt($block.Start)
             $at=$block.Start
@@ -84,8 +90,54 @@ function Manage-RoamingSsh {
             $at=$final[0].Start
         }
         $new=[string[]]@("Host $names","    HostName $Address","    User $User",'    IdentitiesOnly yes',"    IdentityFile $($keys[$Key])",'')
+        if ($Group) { $new=[string[]](@($new[0],"    # RoamingGroup: $Group") + $new[1..($new.Count-1)]) }
         $lines.InsertRange($at,$new)
         ($lines -join "`n").TrimEnd()+"`n"
+    }
+    function Get-RswAliasRows {
+        param([string]$Text,[string]$Search='')
+        $rows=@(foreach ($block in Get-RswBlocks $Text) {
+            foreach ($name in $block.Names) {
+                if ($name -match '[*?!]') { continue }
+                $keyName=@($keys.Keys | Where-Object { $keys[$_] -ceq $block.Fields.IdentityFile } | Sort-Object)
+                $row=[pscustomobject]@{
+                    Group=$(if ($block.Group) { $block.Group } else { 'Ungrouped' })
+                    Alias=$name
+                    Server=$(if ($block.Fields.HostName) { $block.Fields.HostName } else { $name })
+                    Username=$(if ($block.Fields.User) { $block.Fields.User } else { '(inherited/default)' })
+                    Key=$(if ($keyName.Count) { $keyName -join ', ' } elseif ($block.Fields.IdentityFile) { $block.Fields.IdentityFile } else { '(inherited/default)' })
+                }
+                # Literal case-insensitive search, not a regex or wildcard expression.
+                if (-not $Search -or @($row.Group,$row.Alias,$row.Server,$row.Username,$row.Key | Where-Object { $_.IndexOf($Search,[StringComparison]::OrdinalIgnoreCase) -ge 0 }).Count) { $row }
+            }
+        })
+        $rows | Sort-Object Group,Server,Alias
+    }
+    function Show-RswAliases {
+        $search=''
+        while ($true) {
+            $rows=@(Get-RswAliasRows ([IO.File]::ReadAllText($config)) -Search $search)
+            Write-Host "`nConfigured SSH aliases$(if ($search) { " — search: $search" })"
+            if (-not $rows.Count) { Write-Host 'No matching aliases.' }
+            foreach ($section in ($rows | Group-Object Group)) {
+                $heading="`n  ┌─ $($section.Name) $('─' * [Math]::Max(0,48-$section.Name.Length))"
+                if (Get-Command Write-Color -ErrorAction SilentlyContinue) { Write-Color $heading 'Header' }
+                else { Write-Host $heading -ForegroundColor Cyan }
+                foreach ($server in ($section.Group | Group-Object Server)) {
+                    Write-Host "  Server: $($server.Name)"
+                    $server.Group | Format-Table Alias,Server,Username,Key -AutoSize -Wrap | Out-Host
+                }
+            }
+            Write-Host "$($rows.Count) aliases shown. Shared configuration; local overrides may differ."
+            Write-Host ('─' * 63)
+            Write-Host '[S] Search  [A] Show all  [Q] Return to setup'
+            switch ((Read-Host 'Choose [Enter: back]').Trim().ToUpperInvariant()) {
+                'S' { $search=(Read-Host 'Find group, alias, address, username or key (Enter: all)').Trim() }
+                'A' { $search='' }
+                { $_ -in @('','Q') } { return }
+                default { Write-Host 'Choose S, A or Q.' }
+            }
+        }
     }
     function Invoke-RswSsh {
         param([string[]]$Arguments)
@@ -316,6 +368,7 @@ function Manage-RoamingSsh {
         Write-Host '[5] Add a key (enroll or recover)'
         Write-Host '[6] View registered keys and local status'
         Write-Host '[7] Resume authorization / test / publish walkthrough'
+        Write-Host '[8] Browse/search configured aliases'
         if ($state.Count) { Write-Host "Pending aliases: $($state.Aliases -join ', '). Commit: $($state.Commit). Tests must pass in this session." }
         Write-Host ('─' * 63)
         Write-Host '[Q] Return to menu...'
@@ -330,9 +383,18 @@ function Manage-RoamingSsh {
                     $userName=Read-Host 'Login username'
                     $key=Read-Host ('Key: '+(($keys.Keys | Sort-Object) -join ', '))
                     $original=[IO.File]::ReadAllText($config)
-                    $proposal=New-RswConfig $original $alias $address $userName $key
+                    $blocks=@(Get-RswBlocks $original)
+                    $existing=@($blocks | Where-Object { $alias -in $_.Names })
+                    $defaultGroup=if ($existing.Count -eq 1) { $existing[0].Group } else {
+                        $relatedGroups=@($blocks | Where-Object { $_.Fields.HostName -eq $address -and $_.Group } | ForEach-Object Group | Sort-Object -Unique)
+                        if ($relatedGroups.Count -eq 1) { $relatedGroups[0] } else { '' }
+                    }
+                    $group=(Read-Host "Group [$(if ($defaultGroup) {$defaultGroup} else {'Ungrouped'})] (Enter: keep; -: clear)").Trim()
+                    if (-not $group) { $group=$defaultGroup } elseif ($group -eq '-') { $group='' }
+                    $proposal=New-RswConfig $original $alias $address $userName $key -Group $group
                     $changed=@(Get-RswBlocks $proposal | Where-Object { $alias -in $_.Names })[0]
                     Write-Host "Aliases: $($changed.Names -join ', ') -> $userName@$address / $($keys[$key])"
+                    Write-Host "Group: $(if ($changed.Group) {$changed.Group} else {'Ungrouped'})"
                     Write-Host 'After saving: authorize the public key, test the connection, then review and publish.'
                     if ((Read-Host 'Save this configuration? Type YES').Trim() -ine 'YES') { Write-Host 'Cancelled: this alias change was NOT saved.'; break }
                     $backup=Join-Path $localDir ("roaming-"+[guid]::NewGuid().ToString('N')+'.conf')
@@ -394,8 +456,11 @@ function Manage-RoamingSsh {
                 '7' {
                     Invoke-RswResume
                 }
+                '8' {
+                    Show-RswAliases
+                }
                 'Q' { if ($state.Count) { Write-Host 'Pending work retained locally. Reopen this wizard, retest, then publish. No automatic push.' }; if (Get-Command Complete-TechMenuReturn -ErrorAction SilentlyContinue) { Complete-TechMenuReturn }; return }
-                default { Write-Host 'Choose 1-7 or Q.' }
+                default { Write-Host 'Choose 1-8 or Q.' }
             }
         } catch { Write-Host "STOPPED: $_" -ForegroundColor Yellow }
     }
