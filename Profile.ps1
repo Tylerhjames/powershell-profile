@@ -81,6 +81,10 @@ if (Test-Path "$script:ProfileRepo\.git") {
 
             # Fetch (this is the expensive network call)
             & git fetch --quiet 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                if (Test-Path $FlagFile) { Remove-Item $FlagFile -Force }
+                return
+            }
 
             # Check for local changes — skip pull if dirty
             & git diff --quiet HEAD 2>$null
@@ -96,7 +100,14 @@ if (Test-Path "$script:ProfileRepo\.git") {
             if ($local -ne $remote) {
                 & git pull --ff-only --quiet 2>&1 | Out-Null
                 if ($LASTEXITCODE -eq 0) {
-                    'updated' | Set-Content $FlagFile -Force
+                    # A local-only commit also makes HEAD differ from upstream.
+                    # A successful no-op pull must not request another reload.
+                    $after = & git rev-parse HEAD 2>$null
+                    if ($LASTEXITCODE -eq 0 -and $after -and $after -ne $local) {
+                        'updated' | Set-Content $FlagFile -Force
+                    } elseif (Test-Path $FlagFile) {
+                        Remove-Item $FlagFile -Force
+                    }
                 } else {
                     'pull-failed' | Set-Content $FlagFile -Force
                 }
