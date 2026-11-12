@@ -26,11 +26,11 @@ function global:Get-RoamingSshKeygen {
 }
 function global:Get-RoamingSshFidoDevice {
     $devices=@(Get-PnpDevice -PresentOnly -ErrorAction Stop | Where-Object { $_.FriendlyName -eq 'HID-compliant fido' -and $_.InstanceId -like 'HID\VID_1050&*' })
-    if ($devices.Count -ne 1) { throw "Connect exactly one YubiKey for enrollment (found $($devices.Count))." }
+    if ($devices.Count -ne 1) { throw "Connect exactly one YubiKey for enrollment or recovery (found $($devices.Count))." }
     $interfaceName='##?#'+$devices[0].InstanceId.Replace('\','#')+'#{4d1e55b2-f16f-11cf-88cb-001111000030}'
     $interfaces='HKLM:\SYSTEM\CurrentControlSet\Control\DeviceClasses\{4d1e55b2-f16f-11cf-88cb-001111000030}'
     $match=@(Get-ChildItem -LiteralPath $interfaces -ErrorAction Stop | Where-Object PSChildName -IEQ $interfaceName)
-    if ($match.Count -ne 1) { throw 'Could not resolve the connected YubiKey USB interface. No enrollment attempted.' }
+    if ($match.Count -ne 1) { throw 'Could not resolve the connected YubiKey USB interface. No hardware operation attempted.' }
     '\\?\'+$match[0].PSChildName.Substring(4)
 }
 function global:Invoke-RoamingSshKeygen {
@@ -41,7 +41,7 @@ function global:Invoke-RoamingSshKeygen {
         $env:PATH="$(Split-Path $Executable -Parent);$saved"
         if ($Device) {
             $bash=Join-Path (Split-Path $Executable -Parent) 'bash.exe'
-            if (-not (Test-Path -LiteralPath $bash)) { throw 'Git Bash is required for direct USB enrollment.' }
+            if (-not (Test-Path -LiteralPath $bash)) { throw 'Git Bash is required for direct USB enrollment/recovery.' }
             $env:ROAMING_SSH_FIDO_DEVICE=$Device
             & $bash --noprofile --norc (Join-Path $PSScriptRoot 'Invoke-RoamingSshEnroll.sh').Replace('\','/') @Arguments
         } else { & $Executable @Arguments }
@@ -89,16 +89,19 @@ function global:Add-RoamingSshKey {
     $keygen=Get-RoamingSshKeygen
     Write-Host 'Connect ONLY the intended key. PINs and passphrases are entered directly into OpenSSH.'
     $requirePin=$false
+    $device=Get-RoamingSshFidoDevice
+    Write-Host 'Using the connected YubiKey USB interface directly.'
     if ($mode -eq '1') {
-        $device=Get-RoamingSshFidoDevice
-        Write-Host 'Using the connected YubiKey USB interface directly.'
         Write-Host 'A FIDO2 PIN must already be set. Type it when asked; touch only when prompted.'
         Write-Host 'A NEW credential will be added to the hardware key; no reset or deletion is performed.'
         $pin=(Read-Host 'Require PIN verification for every login? [y/N] (No keeps touch-only behavior)').Trim()
         if ($pin -notmatch '^(?i:y|yes|n|no)?$') { throw 'Choose Y or N.' }
         $requirePin=$pin -match '^(?i:y|yes)$'
     }
-    if ((Read-Host 'Proceed with the selected key? Type YES') -cne 'YES') { return }
+    if ((Read-Host 'Proceed with the selected key? Type YES').Trim() -ine 'YES') {
+        Write-Host 'Cancelled. No hardware operation performed.'
+        return
+    }
     $work=Join-Path $sshDir ('key-setup-'+[guid]::NewGuid().ToString('N'))
     $null=New-Item -ItemType Directory -Path $work -Force
     Write-Host "Recovery/working files will remain in $work (outside Git)."
@@ -115,7 +118,7 @@ function global:Add-RoamingSshKey {
     $recovery=Join-Path $work 'recovered'
     $null=New-Item -ItemType Directory -Path $recovery
     Push-Location $recovery
-    try { Invoke-RoamingSshKeygen $keygen @('-K') | Out-Host } finally { Pop-Location }
+    try { Invoke-RoamingSshKeygen $keygen @('-K') -Device $device | Out-Host } finally { Pop-Location }
     $choices=@(foreach ($pub in Get-ChildItem -LiteralPath $recovery -Filter '*.pub' -File) {
         $fp=Get-RoamingSshFingerprint $keygen $pub.FullName
         if (-not $expected -or $fp -ceq $expected) { [pscustomobject]@{Path=$pub.FullName;Fingerprint=$fp} }
@@ -128,7 +131,10 @@ function global:Add-RoamingSshKey {
     $choice=$choices[$selected-1]
     if (@($RegisteredKeys | Where-Object Fingerprint -CEQ $choice.Fingerprint).Count) { throw 'This fingerprint is already registered; use Set up this computer to import it.' }
     Write-Host "Register $name as $file with fingerprint $($choice.Fingerprint)."
-    if ((Read-Host 'Confirm fingerprint and key name? Type YES') -cne 'YES') { return }
+    if ((Read-Host 'Confirm fingerprint and key name? Type YES').Trim() -ine 'YES') {
+        Write-Host 'Registration cancelled. Recovery files retained; nothing installed.'
+        return
+    }
     Copy-RoamingSshIdentity $choice.Path $target $name
     Write-Host "Local identity installed: $target. Authorize its .pub on servers separately; no server was changed."
     [pscustomobject]@{Name=$name;FileName=$file;PublicLabel=$name;Fingerprint=$choice.Fingerprint}

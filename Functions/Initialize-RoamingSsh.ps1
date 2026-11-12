@@ -60,7 +60,8 @@ function global:Initialize-RoamingSsh {
         $env:PATH = "$(Split-Path $keygen -Parent);$savedPath"
         Write-Host "Connect ONLY the $ImportKey. Enter its PIN locally and touch when prompted."
         Write-Host 'Press Enter twice at the optional FILE passphrase prompts if you want no file passphrase.'
-        Invoke-RoamingSshKeygen $keygen @('-K') | Out-Host
+        $device = Get-RoamingSshFidoDevice
+        Invoke-RoamingSshKeygen $keygen @('-K') -Device $device | Out-Host
         $matches = @(foreach ($pub in Get-ChildItem -LiteralPath $importDir -Filter '*.pub') {
             $fp = Get-RoamingSshFingerprint $keygen $pub.FullName
             if ($fp -ceq $expected) { $pub }

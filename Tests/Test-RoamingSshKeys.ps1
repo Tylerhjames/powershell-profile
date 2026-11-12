@@ -12,7 +12,7 @@ $helper=Get-Content (Join-Path $SourceRoot 'Functions/RoamingSshKeys.ps1') -Raw
 $helper=$helper.Replace("Join-Path `$HOME '.ssh'", "Join-Path `$fixtureRoot 'ssh'")
 . ([scriptblock]::Create($helper))
 $registry=Join-Path $SourceRoot 'SSH/keys.json'
-$registered=@(Get-RoamingSshKeys $registry)
+$registered=@(Get-RoamingSshKeys $registry | Where-Object Name -In 'Nano','NFC')
 Assert ($registered.Count -eq 2 -and $registered[0].Name -eq 'Nano' -and $registered[1].Name -eq 'NFC') 'Legacy names preserved'
 Assert ($registered[0].FileName -eq 'id_tyler_5cnano' -and $registered[0].Fingerprint -ceq 'SHA256:Y7WxfPgXN37X8FhrXzBUNaa8vLmaYnKm19BxHkUMOf0') 'Nano identity unchanged'
 Assert ($registered[1].FileName -eq 'id_tyler_5cnfc' -and $registered[1].Fingerprint -ceq 'SHA256:QsJMtJGoabxp1a9/PABQ3S9dsxSPhyRIdFYT2ncIfmw') 'NFC identity unchanged'
@@ -39,6 +39,7 @@ function Invoke-RoamingSshKeygen {
         [IO.File]::WriteAllText($path,'dummy handle')
         [IO.File]::WriteAllText($path+'.pub','sk-ssh-ed25519@openssh.com ZHVtbXk= '+$script:recoverLabel)
     }elseif($Arguments[0] -eq '-K'){
+        Assert ($Device -eq '\\?\hid#fixture') 'Recovery explicitly selects the USB device (enrollment, recovery, and import)'
         if($script:failRecover){throw 'Mock recovery failure'}
         $label=if($script:mismatch){'wrong'}else{$script:recoverLabel}
         [IO.File]::WriteAllText((Join-Path $PWD 'recovered'),'dummy recovered handle')
@@ -67,9 +68,10 @@ Assert (-not(Test-Path (Join-Path $fixtureRoot 'ssh/id_roaming_mismatch'))) 'Wro
 $script:mismatch=$false;$script:failRecover=$true
 Queue-Answers @('Failed','2','YES');Reject {Add-RoamingSshKey $registered} 'Mock recovery failure'
 $script:failRecover=$false;$script:recoverLabel='existing'
-Queue-Answers @('Existing','2','YES','1','YES')
+Queue-Answers @('Existing','2',' yes ','1','yEs')
 $existing=Add-RoamingSshKey $registered
 Assert ($existing.Name -eq 'Existing') 'Existing resident key registration works'
+Assert ($script:answers.Count -eq 0) 'Lowercase/mixed-case confirmations with surrounding spaces accepted'
 $script:recoverLabel='Nano';Queue-Answers @('Duplicate','2','YES','1')
 Reject {Add-RoamingSshKey $registered} 'fingerprint is already registered'
 $script:recoverLabel='declined';Queue-Answers @('Declined','2','YES','1','NO')

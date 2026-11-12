@@ -1,4 +1,20 @@
 [
-  {"Name":"Nano","FileName":"id_tyler_5cnano","PublicLabel":"tyler-5cnano","Fingerprint":"SHA256:Y7WxfPgXN37X8FhrXzBUNaa8vLmaYnKm19BxHkUMOf0"},
-  {"Name":"NFC","FileName":"id_tyler_5cnfc","PublicLabel":"tyler-5cnfc","Fingerprint":"SHA256:QsJMtJGoabxp1a9/PABQ3S9dsxSPhyRIdFYT2ncIfmw"}
+  {
+    "Name": "Nano",
+    "FileName": "id_tyler_5cnano",
+    "PublicLabel": "tyler-5cnano",
+    "Fingerprint": "SHA256:Y7WxfPgXN37X8FhrXzBUNaa8vLmaYnKm19BxHkUMOf0"
+  },
+  {
+    "Name": "NFC",
+    "FileName": "id_tyler_5cnfc",
+    "PublicLabel": "tyler-5cnfc",
+    "Fingerprint": "SHA256:QsJMtJGoabxp1a9/PABQ3S9dsxSPhyRIdFYT2ncIfmw"
+  },
+  {
+    "Name": "NanoA",
+    "FileName": "id_roaming_tyler_5nano",
+    "PublicLabel": "tyler_5nano",
+    "Fingerprint": "SHA256:oDQCj00bRGsF3NEOEpBh4fGuWE1cL3RlxrvsmdbSuFM"
+  }
 ]
