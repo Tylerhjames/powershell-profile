@@ -15,6 +15,11 @@ Q. Return to menu
 
 No server authorization changes, key deletion, or hardware reset are performed.
 
+New-key enrollment on Windows selects the sole connected YubiKey's USB FIDO
+interface directly. Connect only the intended key and set its FIDO2 PIN first.
+The PIN is needed for enrollment/recovery even when per-login PIN verification
+is disabled. Enter PINs locally in OpenSSH; touch only when prompted.
+
 ## Browse and organize aliases
 
 Option **8** keeps aliases for the same server together under a Group heading.

@@ -24,14 +24,29 @@ function global:Get-RoamingSshKeygen {
     if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'Git ssh-keygen is missing.' }
     $exe
 }
+function global:Get-RoamingSshFidoDevice {
+    $devices=@(Get-PnpDevice -PresentOnly -ErrorAction Stop | Where-Object { $_.FriendlyName -eq 'HID-compliant fido' -and $_.InstanceId -like 'HID\VID_1050&*' })
+    if ($devices.Count -ne 1) { throw "Connect exactly one YubiKey for enrollment (found $($devices.Count))." }
+    $interfaceName='##?#'+$devices[0].InstanceId.Replace('\','#')+'#{4d1e55b2-f16f-11cf-88cb-001111000030}'
+    $interfaces='HKLM:\SYSTEM\CurrentControlSet\Control\DeviceClasses\{4d1e55b2-f16f-11cf-88cb-001111000030}'
+    $match=@(Get-ChildItem -LiteralPath $interfaces -ErrorAction Stop | Where-Object PSChildName -IEQ $interfaceName)
+    if ($match.Count -ne 1) { throw 'Could not resolve the connected YubiKey USB interface. No enrollment attempted.' }
+    '\\?\'+$match[0].PSChildName.Substring(4)
+}
 function global:Invoke-RoamingSshKeygen {
-    param([string]$Executable,[string[]]$Arguments)
+    param([string]$Executable,[string[]]$Arguments,[string]$Device)
     $saved=$env:PATH
+    $savedDevice=$env:ROAMING_SSH_FIDO_DEVICE
     try {
         $env:PATH="$(Split-Path $Executable -Parent);$saved"
-        & $Executable @Arguments
+        if ($Device) {
+            $bash=Join-Path (Split-Path $Executable -Parent) 'bash.exe'
+            if (-not (Test-Path -LiteralPath $bash)) { throw 'Git Bash is required for direct USB enrollment.' }
+            $env:ROAMING_SSH_FIDO_DEVICE=$Device
+            & $bash --noprofile --norc (Join-Path $PSScriptRoot 'Invoke-RoamingSshEnroll.sh').Replace('\','/') @Arguments
+        } else { & $Executable @Arguments }
         if ($LASTEXITCODE -ne 0) { throw "ssh-keygen failed ($LASTEXITCODE). Existing keys preserved; working files retained." }
-    } finally { $env:PATH=$saved }
+    } finally { $env:PATH=$saved; $env:ROAMING_SSH_FIDO_DEVICE=$savedDevice }
 }
 function global:Get-RoamingSshFingerprint {
     param([string]$Executable,[string]$PublicPath)
@@ -75,6 +90,9 @@ function global:Add-RoamingSshKey {
     Write-Host 'Connect ONLY the intended key. PINs and passphrases are entered directly into OpenSSH.'
     $requirePin=$false
     if ($mode -eq '1') {
+        $device=Get-RoamingSshFidoDevice
+        Write-Host 'Using the connected YubiKey USB interface directly.'
+        Write-Host 'A FIDO2 PIN must already be set. Type it when asked; touch only when prompted.'
         Write-Host 'A NEW credential will be added to the hardware key; no reset or deletion is performed.'
         $pin=(Read-Host 'Require PIN verification for every login? [y/N] (No keeps touch-only behavior)').Trim()
         if ($pin -notmatch '^(?i:y|yes|n|no)?$') { throw 'Choose Y or N.' }
@@ -90,7 +108,7 @@ function global:Add-RoamingSshKey {
         $application='ssh:roaming-'+$name.ToLowerInvariant()+'-'+[guid]::NewGuid().ToString('N')
         $args=@('-t','ed25519-sk','-O','resident','-O',"application=$application",'-C',$name,'-f',(Join-Path $work 'enrolled'))
         if ($requirePin) { $args+=@('-O','verify-required') }
-        Invoke-RoamingSshKeygen $keygen $args | Out-Host
+        Invoke-RoamingSshKeygen $keygen $args -Device $device | Out-Host
         $expected=Get-RoamingSshFingerprint $keygen (Join-Path $work 'enrolled.pub')
         Write-Host "Created $expected. Now recover it from the same key to verify portability."
     }

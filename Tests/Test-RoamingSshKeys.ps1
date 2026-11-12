@@ -26,10 +26,12 @@ $script:recoverLabel='existing';$script:mismatch=$false;$script:failRecover=$fal
 function Read-Host {param($Prompt) if(-not $script:answers.Count){throw "Unexpected prompt: $Prompt"};$script:answers.Dequeue()}
 function Queue-Answers([string[]]$Values){$script:answers.Clear();foreach($v in $Values){$script:answers.Enqueue($v)}}
 function Get-RoamingSshKeygen {Join-Path $fixtureRoot 'ssh-keygen.exe'}
+function Get-RoamingSshFidoDevice { '\\?\hid#fixture' }
 function Invoke-RoamingSshKeygen {
-    param([string]$Executable,[string[]]$Arguments)
+    param([string]$Executable,[string[]]$Arguments,[string]$Device)
     $script:calls.Add(@($Arguments))
     if($Arguments[0] -eq '-t'){
+        Assert ($Device -eq '\\?\hid#fixture') 'Enrollment explicitly selects the USB device'
         Assert ($Arguments[1] -eq 'ed25519-sk' -and 'resident' -in $Arguments) 'Enrollment uses resident FIDO key'
         Assert (@($Arguments | Where-Object {$_ -like 'application=ssh:roaming-*'}).Count -eq 1) 'Enrollment uses a unique SSH application'
         $path=$Arguments[[array]::IndexOf($Arguments,'-f')+1]
