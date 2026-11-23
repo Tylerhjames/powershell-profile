@@ -530,5 +530,9 @@ if (Get-Module PSReadLine) {
 
 Write-Color "$global:CbitCheck Roaming PowerShell profile loaded" 'Good'
 
+# Install optional command suggestions and their dependency on each workstation.
+. (Join-Path $script:ProfileRepo 'Functions/Initialize-RoamingCommandNotFound.ps1')
+Initialize-RoamingCommandNotFound
+
 # Reset error preference
 $ErrorActionPreference = 'Continue'
